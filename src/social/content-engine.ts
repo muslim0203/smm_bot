@@ -129,8 +129,9 @@ async function createImage(
   const imageData = Buffer.from(base64, "base64");
   const contentType = "image/jpeg";
   if (!isSpacesConfigured()) {
+    const imageVersion = crypto.randomBytes(8).toString("hex");
     return {
-      imageUrl: `${config.backendUrl.replace(/\/+$/, "")}/api/social/media/${draftId}.jpg`,
+      imageUrl: `${config.backendUrl.replace(/\/+$/, "")}/api/social/media/${draftId}/${imageVersion}.jpg`,
       imageData,
       contentType,
     };
