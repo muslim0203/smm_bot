@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { aiGenerateJson, isAiAvailable } from "../lib/ai-client.js";
+import { aiGenerateJson, isAiAvailable, selectReplyModelTier } from "../lib/ai-client.js";
 
 export type ReplyDecision = {
   decision: "reply" | "handoff" | "ignore";
@@ -55,6 +55,7 @@ export async function decideInstagramReply(input: {
     : "Bu shaxsiy DM. 700 belgidan oshirma. Kerak bo'lsa ro'yxatdan o'tish yoki tarif havolasini bitta CTA sifatida ber.";
 
   const { data } = await aiGenerateJson<ReplyDecision>({
+    tier: selectReplyModelTier(input.message, input.recentContext?.length ?? 0),
     messages: [
       {
         role: "system",
@@ -84,7 +85,6 @@ Rasmiy sayt: ${website}`,
       },
     ],
     maxTokens: 500,
-    temperature: 0.2,
   });
 
   if (!data || !["reply", "handoff", "ignore"].includes(data.decision)) {

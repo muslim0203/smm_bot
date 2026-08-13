@@ -61,6 +61,7 @@ async function createPlan(projectId: string): Promise<ContentPlan> {
   });
 
   const { data } = await aiGenerateJson<ContentPlan>({
+    tier: "smart",
     messages: [
       {
         role: "system",
@@ -79,7 +80,6 @@ Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePro
       { role: "user", content: `Oxirgi mavzular: ${JSON.stringify(recent)}` },
     ],
     maxTokens: 1_500,
-    temperature: 0.7,
   });
   if (!data) throw new Error("AI kontent rejasini qaytarmadi");
   return normalizePlan(data);

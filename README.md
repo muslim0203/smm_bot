@@ -25,6 +25,13 @@ npm run dev
 
 `.env` ichida kamida `DATABASE_URL`, Telegram bot kalitlari, Meta App kalitlari, `OPENAI_API_KEY`, `SOCIAL_TOKEN_ENCRYPTION_KEY` va S3 sozlamalarini kiriting.
 
+Token xarajatini kamaytirish uchun ikki bosqichli model routing ishlaydi:
+
+- `AI_OPENAI_FAST_MODEL` — qisqa va oddiy DM/kommentlar (default: `gpt-5.6-luna`);
+- `AI_OPENAI_SMART_MODEL` — uzun yoki tahliliy savollar va kontent rejalari (default: `gpt-5.6-terra`).
+
+Routing alohida AI chaqiruvisiz, xabar uzunligi, suhbat konteksti va murakkablik belgilariga qarab tanlanadi.
+
 Telegram botdan boshlash:
 
 1. `/start`

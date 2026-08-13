@@ -14,7 +14,8 @@ export const config = {
   corsOrigins: (env.CORS_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   openaiApiKey: env.OPENAI_API_KEY ?? "",
   ai: {
-    openaiModel: env.AI_OPENAI_MODEL ?? "gpt-4o-mini",
+    fastModel: env.AI_OPENAI_FAST_MODEL ?? env.AI_OPENAI_MODEL ?? "gpt-5.6-luna",
+    smartModel: env.AI_OPENAI_SMART_MODEL ?? "gpt-5.6-terra",
     imageModel: env.AI_IMAGE_MODEL ?? "gpt-image-2",
     imageQuality: env.AI_IMAGE_QUALITY ?? "medium",
     timeoutMs: positiveInt(env.AI_TIMEOUT_MS, 45_000),
