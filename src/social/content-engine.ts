@@ -72,8 +72,18 @@ ${project.brandFacts}
 Sayt: ${project.websiteUrl ?? "ko'rsatilmagan"}
 
 Bugun uchun bitta original Instagram feed/reels g'oyasi yarating. Oldingi mavzularni takrorlamang.
-Hech qanday yolg'on natija, kafolat, narx yoki fakt uydirmang. Image prompt ingliz tilida bo'lsin,
-vertikal 4:5 premium commercial visual uchun yozilsin, rasmning ichida matn/logotip bo'lmasin.
+Hech qanday yolg'on natija, kafolat, narx yoki fakt uydirmang.
+
+Image prompt ingliz tilida yozilsin va vertikal 4:5 premium Instagram marketing posteri yaratsin.
+Poster odamni bir qarashda qiziqtirsin va xizmatning foydasini tushuntirsin. Image prompt ichida quyidagi
+uchta ko'rinadigan matnni aynan qo'shtirnoqda bering; matnlarning o'zi auditoriya tilida bo'lsin:
+1) 3-6 so'zli kuchli sarlavha;
+2) faqat tasdiqlangan brend faktlariga asoslangan, 6-12 so'zli xizmat yoki foyda izohi;
+3) 2-4 so'zli aniq CTA.
+Katta, kontrastli, telefonda oson o'qiladigan professional tipografiya, aniq vizual ierarxiya va matn uchun
+yetarli bo'sh joy talab qiling. Ko'pi bilan uchta matn bloki bo'lsin; uzun paragraf, hashtag, uydirma narx,
+uydirma chegirma, watermark yoki begona logotip bo'lmasin.
+
 Caption foydalanuvchi auditoriyasi tilida, tabiiy CTA va 3-7 relevant hashtag bilan bo'lsin.
 Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePrompt":"..."}.`,
       },
