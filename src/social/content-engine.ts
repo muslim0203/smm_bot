@@ -177,21 +177,45 @@ async function notifyDraft(draftId: string): Promise<void> {
   }
 }
 
-export async function generateDailyContent(projectId: string, force = false): Promise<string> {
+export async function generateDailyContent(
+  projectId: string,
+  force = false,
+  regenerateDraftId?: string,
+): Promise<string> {
   const project = await prisma.socialProject.findUniqueOrThrow({
     where: { id: projectId },
     include: { instagramAccounts: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
   });
   const contentDate = projectClock(project.timezone).date;
-  const existing = await prisma.socialContentDraft.findUnique({
-    where: { projectId_contentDate: { projectId, contentDate } },
+  const existing = await prisma.socialContentDraft.findFirst({
+    where: { projectId, contentDate },
+    orderBy: { createdAt: "desc" },
   });
   if (existing && !force) return existing.id;
 
-  const draft = existing
+  const regenerationTarget = regenerateDraftId
+    ? await prisma.socialContentDraft.findFirst({
+        where: {
+          id: regenerateDraftId,
+          projectId,
+          status: { in: ["GENERATING", "REVIEW", "REJECTED", "FAILED"] },
+        },
+      })
+    : null;
+  const draft = regenerationTarget
     ? await prisma.socialContentDraft.update({
-        where: { id: existing.id },
-        data: { status: "GENERATING", lastError: null, attempts: { increment: 1 } },
+        where: { id: regenerationTarget.id },
+        data: {
+          status: "GENERATING",
+          lastError: null,
+          attempts: 0,
+          lockedAt: null,
+          approvedAt: null,
+          approvedByTelegramUserId: null,
+          instagramContainerId: null,
+          instagramMediaId: null,
+          publishedAt: null,
+        },
       })
     : await prisma.socialContentDraft.create({
         data: {
@@ -218,8 +242,8 @@ export async function generateDailyContent(projectId: string, force = false): Pr
         lastError: null,
       },
     });
-    if (existing?.imageObjectKey && existing.imageObjectKey !== image.objectKey) {
-      await deleteFromSpaces(existing.imageObjectKey);
+    if (regenerationTarget?.imageObjectKey && regenerationTarget.imageObjectKey !== image.objectKey) {
+      await deleteFromSpaces(regenerationTarget.imageObjectKey);
     }
     await notifyDraft(draft.id);
     return draft.id;
@@ -247,15 +271,20 @@ async function instagramJson<T>(token: string, path: string, init?: RequestInit)
   return JSON.parse(raw) as T;
 }
 
-export async function approveContentDraft(draftId: string, telegramUserId: string): Promise<void> {
-  await prisma.socialContentDraft.update({
-    where: { id: draftId },
+export async function approveContentDraft(draftId: string, telegramUserId: string): Promise<boolean> {
+  const result = await prisma.socialContentDraft.updateMany({
+    where: { id: draftId, status: "REVIEW" },
     data: { status: "APPROVED", approvedAt: new Date(), approvedByTelegramUserId: telegramUserId, lastError: null },
   });
+  return result.count === 1;
 }
 
-export async function rejectContentDraft(draftId: string): Promise<void> {
-  await prisma.socialContentDraft.update({ where: { id: draftId }, data: { status: "REJECTED" } });
+export async function rejectContentDraft(draftId: string): Promise<boolean> {
+  const result = await prisma.socialContentDraft.updateMany({
+    where: { id: draftId, status: "REVIEW" },
+    data: { status: "REJECTED" },
+  });
+  return result.count === 1;
 }
 
 export async function advanceContentPublish(draftId: string): Promise<void> {
@@ -275,6 +304,13 @@ export async function advanceContentPublish(draftId: string): Promise<void> {
       where: { id: draftId },
       include: { instagramAccount: true, project: true },
     });
+    if (draft.instagramMediaId) {
+      await prisma.socialContentDraft.update({
+        where: { id: draft.id },
+        data: { status: "PUBLISHED", lockedAt: null, lastError: null },
+      });
+      return;
+    }
     if (!draft.imageUrl || !draft.caption) throw new Error("Draft rasm yoki caption'siz");
     const account = draft.instagramAccount ?? await prisma.instagramAccount.findFirst({
       where: { projectId: draft.projectId, isActive: true, publishingEnabled: true },

@@ -116,7 +116,7 @@ model SocialContentDraft {
   project          SocialProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: SetNull)
 
-  @@unique([projectId, contentDate])
+  @@index([projectId, contentDate])
   @@index([status, scheduledFor])
   @@index([instagramAccountId, status])
   @@map("social_content_drafts")

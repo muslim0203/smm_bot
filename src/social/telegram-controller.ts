@@ -322,18 +322,22 @@ async function handleCallback(callback: TelegramCallback): Promise<void> {
     const draft = await prisma.socialContentDraft.findUnique({ where: { id }, include: { project: true } });
     if (!draft) return sendTelegramMessage(chatId, "Draft topilmadi.");
     if (action === "approve") {
-      await approveContentDraft(id, telegramUserId);
+      const approved = await approveContentDraft(id, telegramUserId);
+      if (!approved) {
+        return sendTelegramMessage(chatId, `Bu kontent avval qayta ishlangan. Hozirgi holati: ${draft.status}.`);
+      }
       await sendTelegramMessage(chatId, `✅ ${draft.project.name} kontenti tasdiqlandi. Publish jarayoni boshlandi.`);
       void advanceContentPublish(id).catch((error) => sendTelegramMessage(chatId, `❌ Publish xatosi: ${error instanceof Error ? error.message : String(error)}`));
       return;
     }
     if (action === "reject") {
-      await rejectContentDraft(id);
+      const rejected = await rejectContentDraft(id);
+      if (!rejected) return sendTelegramMessage(chatId, `Bu kontent avval qayta ishlangan. Hozirgi holati: ${draft.status}.`);
       return sendTelegramMessage(chatId, `❌ ${draft.project.name} kontenti rad etildi.`);
     }
     if (action === "regen") {
       await sendTelegramMessage(chatId, "🔄 Kontent qayta yaratilmoqda...");
-      void generateDailyContent(draft.projectId, true).catch((error) => sendTelegramMessage(chatId, `❌ ${error instanceof Error ? error.message : String(error)}`));
+      void generateDailyContent(draft.projectId, true, draft.id).catch((error) => sendTelegramMessage(chatId, `❌ ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
