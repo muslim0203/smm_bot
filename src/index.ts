@@ -39,6 +39,7 @@ app.use(express.json({
     (request as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
   },
 }));
+app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use("/api", rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: "draft-8" }));
 
 app.get("/api/health", (_request, response) => {
