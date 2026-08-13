@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model InstagramInboxEvent {
+  id             String    @id @default(cuid())
+  accountId      String?   @map("account_id")
+  eventKey       String    @unique @map("event_key")
+  eventType      String    @map("event_type")
+  senderId       String    @map("sender_id")
+  senderUsername String?   @map("sender_username")
+  objectId       String    @map("object_id")
+  message        String
+  status         String    @default("PENDING")
+  replyText      String?   @map("reply_text")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  lockedAt       DateTime? @map("locked_at")
+  processedAt    DateTime? @map("processed_at")
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  account InstagramAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([accountId, status, createdAt])
+  @@index([senderId, createdAt])
+  @@map("instagram_inbox_events")
+}
+
+model SocialProject {
+  id                      String   @id @default(cuid())
+  key                     String   @unique
+  name                    String
+  description             String?
+  brandVoice              String   @default("Samimiy, aniq va professional") @map("brand_voice")
+  brandFacts              String   @map("brand_facts")
+  websiteUrl              String?  @map("website_url")
+  timezone                String   @default("Asia/Tashkent")
+  contentEnabled          Boolean  @default(false) @map("content_enabled")
+  contentApprovalRequired Boolean  @default(true) @map("content_approval_required")
+  autoPublishEnabled      Boolean  @default(false) @map("auto_publish_enabled")
+  dailyContentHour        Int      @default(9) @map("daily_content_hour")
+  dailyContentMinute      Int      @default(0) @map("daily_content_minute")
+  isActive                Boolean  @default(true) @map("is_active")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  instagramAccounts InstagramAccount[]
+  contentDrafts     SocialContentDraft[]
+  telegramSessions  TelegramSocialSession[]
+  oauthStates       InstagramOAuthState[]
+
+  @@map("social_projects")
+}
+
+model InstagramAccount {
+  id                    String    @id @default(cuid())
+  projectId             String    @map("project_id")
+  label                 String
+  username              String?
+  instagramUserId       String    @unique @map("instagram_user_id")
+  accessTokenEncrypted  String    @map("access_token_encrypted")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  tokenWarningSentAt    DateTime? @map("token_warning_sent_at")
+  dmRepliesEnabled      Boolean   @default(true) @map("dm_replies_enabled")
+  commentRepliesEnabled Boolean   @default(true) @map("comment_replies_enabled")
+  publishingEnabled     Boolean   @default(false) @map("publishing_enabled")
+  isActive              Boolean   @default(true) @map("is_active")
+  lastWebhookAt         DateTime? @map("last_webhook_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  project       SocialProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inboxEvents   InstagramInboxEvent[]
+  contentDrafts SocialContentDraft[]
+
+  @@index([projectId, isActive])
+  @@map("instagram_accounts")
+}
+
+model SocialContentDraft {
+  id                       String    @id @default(cuid())
+  projectId                String    @map("project_id")
+  instagramAccountId       String?   @map("instagram_account_id")
+  contentDate              String    @map("content_date")
+  status                   String    @default("GENERATING")
+  format                   String    @default("FEED")
+  topic                    String?
+  hook                     String?
+  script                   String?
+  caption                  String?
+  imagePrompt              String?   @map("image_prompt")
+  imageUrl                 String?   @map("image_url")
+  imageObjectKey           String?   @map("image_object_key")
+  scheduledFor             DateTime? @map("scheduled_for")
+  approvedByTelegramUserId String?   @map("approved_by_telegram_user_id")
+  approvedAt               DateTime? @map("approved_at")
+  instagramContainerId     String?   @map("instagram_container_id")
+  instagramMediaId         String?   @map("instagram_media_id")
+  publishedAt              DateTime? @map("published_at")
+  lastError                String?   @map("last_error")
+  attempts                 Int       @default(0)
+  lockedAt                 DateTime? @map("locked_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  project          SocialProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, contentDate])
+  @@index([status, scheduledFor])
+  @@index([instagramAccountId, status])
+  @@map("social_content_drafts")
+}
+
+model TelegramSocialSession {
+  id                String   @id @default(cuid())
+  telegramUserId    String   @unique @map("telegram_user_id")
+  selectedProjectId String?  @map("selected_project_id")
+  pendingAction     String?  @map("pending_action")
+  pendingEntityId   String?  @map("pending_entity_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  selectedProject SocialProject? @relation(fields: [selectedProjectId], references: [id], onDelete: SetNull)
+
+  @@map("telegram_social_sessions")
+}
+
+model InstagramOAuthState {
+  id             String    @id @default(cuid())
+  projectId      String    @map("project_id")
+  telegramUserId String    @map("telegram_user_id")
+  stateHash      String    @unique @map("state_hash")
+  expiresAt      DateTime  @map("expires_at")
+  usedAt         DateTime? @map("used_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  project SocialProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt, usedAt])
+  @@map("instagram_oauth_states")
+}
