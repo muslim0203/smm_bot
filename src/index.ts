@@ -9,6 +9,7 @@ import { startInstagramWorker } from "./instagram/worker.js";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
 import { instagramRoutes } from "./routes/instagram.js";
+import { legalRoutes } from "./routes/legal.js";
 import { socialControlRoutes } from "./routes/social-control.js";
 import { startSocialContentWorker } from "./social/content-engine.js";
 import { configureTelegramWebhook } from "./social/telegram-api.js";
@@ -45,6 +46,7 @@ app.use("/api", rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: "draf
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true, service: "smm-bot", timestamp: new Date().toISOString() });
 });
+app.use(legalRoutes);
 app.use("/api/instagram", instagramRoutes);
 app.use("/api/social", socialControlRoutes);
 

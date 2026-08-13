@@ -48,6 +48,9 @@ Telegram botdan boshlash:
 - Meta events: `POST /api/instagram/webhook`
 - Instagram OAuth: `GET /api/instagram/oauth/callback`
 - Health: `GET /api/health`
+- Privacy policy: `GET /privacy`
+- Terms: `GET /terms`
+- Data deletion instructions: `GET /data-deletion`
 
 Meta webhook uchun `messages` va `comments` maydonlarini ulang. Direct va comment autojavobni real akkauntda yoqishdan oldin test akkauntda tekshiring.
 
