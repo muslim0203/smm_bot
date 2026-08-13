@@ -99,6 +99,8 @@ model SocialContentDraft {
   imagePrompt              String?   @map("image_prompt")
   imageUrl                 String?   @map("image_url")
   imageObjectKey           String?   @map("image_object_key")
+  imageData                Bytes?    @map("image_data")
+  imageContentType         String?   @map("image_content_type")
   scheduledFor             DateTime? @map("scheduled_for")
   approvedByTelegramUserId String?   @map("approved_by_telegram_user_id")
   approvedAt               DateTime? @map("approved_at")

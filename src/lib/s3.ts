@@ -12,12 +12,16 @@ const s3Client = new S3Client({
   } : {}),
 });
 
+export function isSpacesConfigured(): boolean {
+  return Boolean(config.aws.s3Bucket && config.aws.endpoint);
+}
+
 export async function uploadBufferToSpaces(
   body: Buffer | Uint8Array,
   key: string,
   contentType: string,
 ): Promise<string> {
-  if (!config.aws.s3Bucket || !config.aws.endpoint) throw new Error("S3/Spaces sozlanmagan");
+  if (!isSpacesConfigured()) throw new Error("S3/Spaces sozlanmagan");
   await s3Client.send(new PutObjectCommand({
     Bucket: config.aws.s3Bucket,
     Key: key,

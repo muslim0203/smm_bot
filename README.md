@@ -14,7 +14,8 @@ Telegram orqali bir nechta loyiha va Instagram Professional akkauntlarini bitta 
 
 ## Ishga tushirish
 
-Talablar: Node.js 20+, PostgreSQL va public S3-compatible storage.
+Talablar: Node.js 20+ va PostgreSQL. Public S3-compatible storage tavsiya qilinadi;
+u sozlanmagan kichik loyihalarda rasmlar vaqtincha PostgreSQL orqali public URL'da beriladi.
 
 ```bash
 npm install

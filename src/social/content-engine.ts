@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import { aiGenerateJson, isAiAvailable } from "../lib/ai-client.js";
 import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
-import { deleteFromSpaces, uploadBufferToSpaces } from "../lib/s3.js";
+import { deleteFromSpaces, isSpacesConfigured, uploadBufferToSpaces } from "../lib/s3.js";
 import { decryptSocialToken } from "./token-crypto.js";
 import { sendTelegramMessage, sendTelegramPhoto } from "./telegram-api.js";
 
@@ -85,7 +85,12 @@ Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePro
   return normalizePlan(data);
 }
 
-async function createImage(prompt: string, projectKey: string, contentDate: string): Promise<{ imageUrl: string; objectKey: string }> {
+async function createImage(
+  prompt: string,
+  projectKey: string,
+  contentDate: string,
+  draftId: string,
+): Promise<{ imageUrl: string; objectKey?: string; imageData?: Buffer; contentType: string }> {
   if (!config.openaiApiKey) throw new Error("Rasm yaratish uchun OPENAI_API_KEY kerak");
   const quality = ["low", "medium", "high"].includes(config.ai.imageQuality)
     ? config.ai.imageQuality
@@ -111,9 +116,18 @@ async function createImage(prompt: string, projectKey: string, contentDate: stri
   const base64 = parsed.data?.[0]?.b64_json;
   if (!base64) throw new Error("OpenAI Image API rasm ma'lumotini qaytarmadi");
 
+  const imageData = Buffer.from(base64, "base64");
+  const contentType = "image/jpeg";
+  if (!isSpacesConfigured()) {
+    return {
+      imageUrl: `${config.backendUrl.replace(/\/+$/, "")}/api/social/media/${draftId}.jpg`,
+      imageData,
+      contentType,
+    };
+  }
   const objectKey = `social/${projectKey}/${contentDate}-${crypto.randomBytes(8).toString("hex")}.jpg`;
-  const imageUrl = await uploadBufferToSpaces(Buffer.from(base64, "base64"), objectKey, "image/jpeg");
-  return { imageUrl, objectKey };
+  const imageUrl = await uploadBufferToSpaces(imageData, objectKey, contentType);
+  return { imageUrl, objectKey, contentType };
 }
 
 function draftKeyboard(draftId: string) {
@@ -179,19 +193,21 @@ export async function generateDailyContent(projectId: string, force = false): Pr
 
   try {
     const plan = await createPlan(projectId);
-    const { imageUrl, objectKey } = await createImage(plan.imagePrompt, project.key, contentDate);
+    const image = await createImage(plan.imagePrompt, project.key, contentDate, draft.id);
     const status = project.autoPublishEnabled && !project.contentApprovalRequired ? "APPROVED" : "REVIEW";
     await prisma.socialContentDraft.update({
       where: { id: draft.id },
       data: {
         ...plan,
-        imageUrl,
-        imageObjectKey: objectKey,
+        imageUrl: image.imageUrl,
+        imageObjectKey: image.objectKey ?? null,
+        imageData: image.imageData ?? null,
+        imageContentType: image.contentType,
         status,
         lastError: null,
       },
     });
-    if (existing?.imageObjectKey && existing.imageObjectKey !== objectKey) {
+    if (existing?.imageObjectKey && existing.imageObjectKey !== image.objectKey) {
       await deleteFromSpaces(existing.imageObjectKey);
     }
     await notifyDraft(draft.id);
@@ -290,7 +306,14 @@ export async function advanceContentPublish(draftId: string): Promise<void> {
     });
     await prisma.socialContentDraft.update({
       where: { id: draft.id },
-      data: { status: "PUBLISHED", instagramMediaId: published.id, publishedAt: new Date(), lastError: null, lockedAt: null },
+      data: {
+        status: "PUBLISHED",
+        instagramMediaId: published.id,
+        publishedAt: new Date(),
+        lastError: null,
+        lockedAt: null,
+        imageData: null,
+      },
     });
     const admins = config.telegram.adminUserIds.length ? config.telegram.adminUserIds : [config.telegram.chatId].filter(Boolean);
     await Promise.all(admins.map((admin) => sendTelegramMessage(
