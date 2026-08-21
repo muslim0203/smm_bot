@@ -35,13 +35,65 @@ export async function sendTelegramPhoto(
   photoUrl: string,
   caption: string,
   keyboard?: TelegramInlineKeyboard,
-): Promise<void> {
-  await telegramCall("sendPhoto", {
+): Promise<number | undefined> {
+  const result = await telegramCall<{ message_id?: number }>("sendPhoto", {
     chat_id: chatId,
     photo: photoUrl,
     caption: caption.slice(0, 1_000),
     ...(keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {}),
   });
+  return result.message_id;
+}
+
+/** Telegram rasm izohi 1024 belgi bilan cheklangan; qolgan matn alohida xabar bo'lib ketadi. */
+export async function sendTelegramChannelPost(
+  chatId: string,
+  photoUrl: string,
+  caption: string,
+): Promise<number | undefined> {
+  const text = caption.trim();
+  const limit = 1_000;
+  let head = text;
+  let tail = "";
+  if (text.length > limit) {
+    const breakpoint = text.lastIndexOf("\n", limit);
+    const cut = breakpoint > limit / 2 ? breakpoint : limit;
+    head = text.slice(0, cut).trim();
+    tail = text.slice(cut).trim();
+  }
+
+  const messageId = await sendTelegramPhoto(chatId, photoUrl, head);
+  if (tail) {
+    await telegramCall("sendMessage", {
+      chat_id: chatId,
+      text: tail.slice(0, 4_000),
+      disable_web_page_preview: true,
+      ...(messageId ? { reply_to_message_id: messageId } : {}),
+    });
+  }
+  return messageId;
+}
+
+export type TelegramChat = { id: number; title?: string; username?: string; type: string };
+
+/**
+ * Kanalni tekshiradi: bot unga kira oladimi va post yozish huquqi bormi.
+ * Kanal ulanayotgan paytda xatoni aniq aytish, keyin post yo'qolib qolishidan yaxshiroq.
+ */
+export async function resolveTelegramChannel(chatId: string): Promise<TelegramChat> {
+  const chat = await telegramCall<TelegramChat>("getChat", { chat_id: chatId });
+  const me = await telegramCall<{ id: number }>("getMe", {});
+  const member = await telegramCall<{ status: string; can_post_messages?: boolean }>("getChatMember", {
+    chat_id: chat.id,
+    user_id: me.id,
+  });
+  if (member.status !== "administrator" && member.status !== "creator") {
+    throw new Error("Bot kanalda administrator emas. Botni kanalga admin qilib qo'shing va qayta urinib ko'ring.");
+  }
+  if (chat.type === "channel" && member.can_post_messages === false) {
+    throw new Error("Botda kanalga post yozish huquqi yo'q. Admin sozlamalarida \"Post messages\" ni yoqing.");
+  }
+  return chat;
 }
 
 export async function answerTelegramCallback(callbackQueryId: string, text?: string): Promise<void> {
@@ -77,6 +129,9 @@ export async function configureTelegramWebhook(): Promise<void> {
       { command: "accounts", description: "Instagram akkauntlar" },
       { command: "connect", description: "Instagram ulash" },
       { command: "content", description: "Bugungi kontentni yaratish" },
+      { command: "channel", description: "Telegram kanalni ulash" },
+      { command: "pillars", description: "Kontent turlari" },
+      { command: "themes", description: "Kunlik kontent mavzulari" },
       { command: "queue", description: "Kontent navbati" },
       { command: "schedule", description: "Kunlik kontent vaqtini belgilash" },
       { command: "brand", description: "Tasdiqlangan loyiha faktlarini yangilash" },

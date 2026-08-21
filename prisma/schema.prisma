@@ -15,9 +15,11 @@ model InstagramInboxEvent {
   senderId       String    @map("sender_id")
   senderUsername String?   @map("sender_username")
   objectId       String    @map("object_id")
+  parentId       String?   @map("parent_id")
   message        String
   status         String    @default("PENDING")
   replyText      String?   @map("reply_text")
+  replyObjectId  String?   @map("reply_object_id")
   attempts       Int       @default(0)
   nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
   lockedAt       DateTime? @map("locked_at")
@@ -31,6 +33,8 @@ model InstagramInboxEvent {
   @@index([status, nextAttemptAt])
   @@index([accountId, status, createdAt])
   @@index([senderId, createdAt])
+  @@index([accountId, objectId])
+  @@index([replyObjectId])
   @@map("instagram_inbox_events")
 }
 
@@ -41,7 +45,11 @@ model SocialProject {
   description             String?
   brandVoice              String   @default("Samimiy, aniq va professional") @map("brand_voice")
   brandFacts              String   @map("brand_facts")
+  contentThemes           String?  @map("content_themes")
   websiteUrl              String?  @map("website_url")
+  telegramChannelId       String?  @map("telegram_channel_id")
+  telegramChannelTitle    String?  @map("telegram_channel_title")
+  telegramPublishEnabled  Boolean  @default(false) @map("telegram_publish_enabled")
   timezone                String   @default("Asia/Tashkent")
   contentEnabled          Boolean  @default(false) @map("content_enabled")
   contentApprovalRequired Boolean  @default(true) @map("content_approval_required")
@@ -92,6 +100,7 @@ model SocialContentDraft {
   contentDate              String    @map("content_date")
   status                   String    @default("GENERATING")
   format                   String    @default("FEED")
+  pillar                   String?
   topic                    String?
   hook                     String?
   script                   String?
@@ -106,6 +115,8 @@ model SocialContentDraft {
   approvedAt               DateTime? @map("approved_at")
   instagramContainerId     String?   @map("instagram_container_id")
   instagramMediaId         String?   @map("instagram_media_id")
+  telegramMessageId        String?   @map("telegram_message_id")
+  telegramPostedAt         DateTime? @map("telegram_posted_at")
   publishedAt              DateTime? @map("published_at")
   lastError                String?   @map("last_error")
   attempts                 Int       @default(0)

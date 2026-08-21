@@ -55,4 +55,48 @@ describe("Instagram webhook", () => {
       entry: [{ messaging: [{ sender: { id: "u" }, message: { mid: "m" } }] }],
     })).toEqual([]);
   });
+
+  it("bot o'zi yozgan kommentni qayta ishlamaydi", () => {
+    // Botning javobi ham comment webhook'i bo'lib qaytadi. Uni tashlamasak,
+    // bot o'z javobiga javob yozib, bitta kommentga bir necha javob ketadi.
+    const payload = {
+      object: "instagram",
+      entry: [{
+        id: "business-1",
+        changes: [
+          {
+            field: "comments",
+            value: {
+              id: "c-2",
+              text: "Rahmat! Batafsil ma'lumot uchun saytga o'ting.",
+              from: { id: "business-1", username: "brand" },
+              parent_id: "c-1",
+            },
+          },
+          {
+            field: "comments",
+            value: { id: "c-3", text: "Kurs qachon boshlanadi?", from: { id: "customer-3" }, parent_id: "c-1" },
+          },
+        ],
+      }],
+    };
+
+    // selfIds berilmasa ham entry.id o'zimiznikidir: filtrlash baribir ishlaydi.
+    const events = parseInstagramWebhook(payload);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ objectId: "c-3", senderId: "customer-3", parentId: "c-1" });
+  });
+
+  it("boshqa ulangan akkauntlarning xabarlarini ham self deb biladi", () => {
+    const payload = {
+      object: "instagram",
+      entry: [{
+        id: "business-1",
+        messaging: [{ sender: { id: "business-2" }, message: { mid: "m-9", text: "cross-account" } }],
+      }],
+    };
+
+    expect(parseInstagramWebhook(payload, ["business-2"])).toEqual([]);
+    expect(parseInstagramWebhook(payload, ["business-3"])).toHaveLength(1);
+  });
 });

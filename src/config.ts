@@ -18,6 +18,10 @@ export const config = {
     smartModel: env.AI_OPENAI_SMART_MODEL ?? "gpt-5.6-terra",
     imageModel: env.AI_IMAGE_MODEL ?? "gpt-image-2",
     imageQuality: env.AI_IMAGE_QUALITY ?? "medium",
+    // Model qaytaradigan o'lcham (gpt-image: 1024x1024 | 1024x1536 | 1536x1024).
+    imageSize: env.AI_IMAGE_SIZE ?? "1024x1536",
+    // Instagram feed uchun yakuniy o'lcham: 4:5 (1080x1350) eng ko'p joy egallaydigan format.
+    imageOutputSize: env.AI_IMAGE_OUTPUT_SIZE ?? "1080x1350",
     timeoutMs: positiveInt(env.AI_TIMEOUT_MS, 45_000),
     maxOutputTokens: positiveInt(env.AI_MAX_OUTPUT_TOKENS, 8_192),
   },
@@ -50,6 +54,9 @@ export const config = {
     workerBatchSize: positiveInt(env.INSTAGRAM_WORKER_BATCH_SIZE, 5),
     maxAttempts: positiveInt(env.INSTAGRAM_WORKER_MAX_ATTEMPTS, 3),
     retentionDays: positiveInt(env.INSTAGRAM_EVENT_RETENTION_DAYS, 90),
+    // Bir mijozga qisqa vaqtda ketma-ket avtomatik javob yozib yubormaslik uchun.
+    replyWindowMs: positiveInt(env.INSTAGRAM_REPLY_WINDOW_MS, 15 * 60 * 1000),
+    maxRepliesPerSender: positiveInt(env.INSTAGRAM_MAX_REPLIES_PER_SENDER, 3),
     oauthRedirectUri: env.INSTAGRAM_OAUTH_REDIRECT_URI ?? `${env.BACKEND_URL ?? "http://localhost:3000"}/api/instagram/oauth/callback`,
     tokenEncryptionKey: env.SOCIAL_TOKEN_ENCRYPTION_KEY ?? "",
     contentWorkerIntervalMs: positiveInt(env.SOCIAL_CONTENT_WORKER_INTERVAL_MS, 60_000),

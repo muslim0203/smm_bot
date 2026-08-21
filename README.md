@@ -40,7 +40,21 @@ Telegram botdan boshlash:
 3. loyiha nomi, brend faktlari va saytni kiriting
 4. `🔗 Instagram ulash`
 5. Meta OAuth orqali Professional akkauntga ruxsat bering
-6. `📝 Kontent yaratish` orqali draft oling va Telegramdan tasdiqlang
+6. `/themes` bilan doimiy kontent mavzularini kiriting (masalan: arab tili grammatikasi, CEFR imtihon formati,
+   kundalik iboralar, arab madaniyati)
+7. `/channel @kanal` bilan Telegram kanalni ulang (bot kanalda admin bo'lishi shart)
+8. `📝 Kontent yaratish` orqali draft oling va Telegramdan tasdiqlang
+
+Tasdiqlangan kontent yoqilgan kanallarga joylanadi: Instagram (akkauntda `publishingEnabled` bo'lsa)
+va Telegram kanal (`/channel` bilan ulangan bo'lsa). Ikkalasi mustaqil — faqat Telegram kanalga
+joylash ham mumkin. Telegram rasm izohi 1024 belgi bilan cheklangani uchun uzun caption rasm ostiga
+va davomi alohida xabarga bo'linadi.
+
+Kontent turlari `/pillars` da ko'rinadi; `/content quiz` kabi buyruq bilan aniq turni so'rash mumkin.
+Approval kartasidagi `🎲 Boshqa tur` tugmasi kontentni boshqa ustun bo'yicha qayta yaratadi.
+
+Rasm 4:5 (1080x1350) Instagram feed formatiga keltiriladi: model 2:3 rasm qaytarsa, u markazdan
+qirqib moslashtiriladi va image prompt ichida chekkalarda matn qoldirmaslik talabi beriladi.
 
 ## Webhook manzillari
 
@@ -52,6 +66,11 @@ Telegram botdan boshlash:
 - Privacy policy: `GET /privacy`
 - Terms: `GET /terms`
 - Data deletion instructions: `GET /data-deletion`
+
+Bir kommentga bir nechta javob ketmasligi uchun uch qatlamli himoya bor: webhook'da akkauntning
+o'z hodisalari (bot javoblari ham) tashlanadi, takroriy yetkazishlar 10 daqiqalik oynada filtrlanadi,
+worker esa javob yuborilgach statusni qayta urinishlar bilan yozadi va bir mijozga qisqa vaqtdagi
+javoblar sonini cheklaydi.
 
 Meta webhook uchun `messages` va `comments` maydonlarini ulang. Direct va comment autojavobni real akkauntda yoqishdan oldin test akkauntda tekshiring.
 

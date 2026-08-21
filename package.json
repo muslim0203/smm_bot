@@ -27,7 +27,8 @@
     "express-async-errors": "^3.1.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.2.0",
-    "openai": "^4.73.0"
+    "openai": "^4.73.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

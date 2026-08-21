@@ -3,9 +3,11 @@ import { config } from "../config.js";
 import { aiGenerateJson, isAiAvailable } from "../lib/ai-client.js";
 import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
+import { normalizeInstagramImage } from "../lib/image.js";
 import { deleteFromSpaces, isSpacesConfigured, uploadBufferToSpaces } from "../lib/s3.js";
+import { CONTENT_PILLARS, pillarLabel, selectPillar, type ContentPillar } from "./content-pillars.js";
 import { decryptSocialToken } from "./token-crypto.js";
-import { sendTelegramMessage, sendTelegramPhoto } from "./telegram-api.js";
+import { sendTelegramChannelPost, sendTelegramMessage, sendTelegramPhoto } from "./telegram-api.js";
 
 type ContentPlan = {
   topic: string;
@@ -50,15 +52,36 @@ function normalizePlan(value: ContentPlan): ContentPlan {
   return result;
 }
 
-async function createPlan(projectId: string): Promise<ContentPlan> {
+/** Poster har doim 4:5 formatda kesiladi, shuning uchun kompozitsiya talabi qat'iy beriladi. */
+function imagePromptFraming(pillar: ContentPillar): string {
+  return [
+    "Technical framing (must follow):",
+    "vertical 4:5 Instagram post, 1080x1350 pixels;",
+    `layout style: ${pillar.imageStyle}`,
+    "keep every text block and key element inside the central safe area with at least 10% empty margin",
+    "on all four sides, because the image is center-cropped to 4:5;",
+    "no text near the edges or corners, no cropped letters, no watermark, no logo, no hashtags,",
+    "no invented prices or discounts, correct spelling only, maximum three text blocks,",
+    "large high-contrast typography that stays readable on a phone screen.",
+  ].join(" ");
+}
+
+async function createPlan(projectId: string, pillar: ContentPillar): Promise<ContentPlan> {
   if (!isAiAvailable()) throw new Error("Kontent ssenariysi uchun GEMINI_API_KEY yoki OPENAI_API_KEY kerak");
   const project = await prisma.socialProject.findUniqueOrThrow({ where: { id: projectId } });
   const recent = await prisma.socialContentDraft.findMany({
     where: { projectId, topic: { not: null } },
     orderBy: { createdAt: "desc" },
-    take: 7,
-    select: { topic: true, hook: true },
+    take: 10,
+    select: { topic: true, hook: true, pillar: true },
   });
+
+  const salesRules = pillar.promotional
+    ? `Bu post — xizmat taklifi. Faqat tasdiqlangan brend faktlariga tayaning va bitta aniq CTA bering.`
+    : `MUHIM: bu post REKLAMA EMAS. Narx, tarif, chegirma, "hoziroq ro'yxatdan o'ting" yoki shunga
+o'xshash sotuv chaqirig'i bo'lmasin. Post o'zicha foydali bo'lsin — odam hech narsa sotib olmasa ham
+biror narsani o'rgansin. Brend nomi ko'pi bilan bir marta, tabiiy tarzda eslatilsin.
+Rasmda ham CTA tugmasi yoki reklama shiori bo'lmasin.`;
 
   const { data } = await aiGenerateJson<ContentPlan>({
     tier: "smart",
@@ -69,30 +92,38 @@ async function createPlan(projectId: string): Promise<ContentPlan> {
 Brend ovozi: ${project.brandVoice}
 Tasdiqlangan brend faktlari:
 ${project.brandFacts}
+${project.contentThemes ? `Doimiy kontent mavzulari (asosiy manba shu):
+${project.contentThemes}` : ""}
 Sayt: ${project.websiteUrl ?? "ko'rsatilmagan"}
 
-Bugun uchun bitta original Instagram feed/reels g'oyasi yarating. Oldingi mavzularni takrorlamang.
-Hech qanday yolg'on natija, kafolat, narx yoki fakt uydirmang.
+BUGUNGI KONTENT TURI: ${pillar.label}
+Maqsad: ${pillar.goal}
+Ssenariy talabi: ${pillar.scriptGuide}
+Caption talabi: ${pillar.captionGuide}
 
-Image prompt ingliz tilida yozilsin va vertikal 4:5 premium Instagram marketing posteri yaratsin.
-Poster odamni bir qarashda qiziqtirsin va xizmatning foydasini tushuntirsin. Image prompt ichida quyidagi
-uchta ko'rinadigan matnni aynan qo'shtirnoqda bering; matnlarning o'zi auditoriya tilida bo'lsin:
-1) 3-6 so'zli kuchli sarlavha;
-2) faqat tasdiqlangan brend faktlariga asoslangan, 6-12 so'zli xizmat yoki foyda izohi;
-3) 2-4 so'zli aniq CTA.
-Katta, kontrastli, telefonda oson o'qiladigan professional tipografiya, aniq vizual ierarxiya va matn uchun
-yetarli bo'sh joy talab qiling. Ko'pi bilan uchta matn bloki bo'lsin; uzun paragraf, hashtag, uydirma narx,
-uydirma chegirma, watermark yoki begona logotip bo'lmasin.
+${salesRules}
 
-Caption foydalanuvchi auditoriyasi tilida, tabiiy CTA va 3-7 relevant hashtag bilan bo'lsin.
+Oldingi postlar mavzusini va tuzilishini takrorlamang — yangi g'oya bering.
+Hech qanday yolg'on natija, kafolat, statistika, narx yoki fakt uydirmang.
+Caption auditoriya tilida (asosan o'zbekcha), tabiiy va jonli bo'lsin, 3-7 ta relevant hashtag bilan tugasin.
+
+Image prompt ingliz tilida yozilsin. Posterda ko'rinadigan matnlarni aynan qo'shtirnoqda bering;
+matnlarning o'zi auditoriya tilida bo'lsin (kerak bo'lsa arabcha so'z ham bo'lishi mumkin).
+Ko'pi bilan uchta matn bloki bo'lsin va ular kontent turiga mos kelsin.
 Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePrompt":"..."}.`,
       },
-      { role: "user", content: `Oxirgi mavzular: ${JSON.stringify(recent)}` },
+      {
+        role: "user",
+        content: `Oxirgi postlar (takrorlamang): ${JSON.stringify(recent)}`,
+      },
     ],
     maxTokens: 1_500,
   });
   if (!data) throw new Error("AI kontent rejasini qaytarmadi");
-  return normalizePlan(data);
+  const plan = normalizePlan(data);
+  return { ...plan, imagePrompt: `${plan.imagePrompt}
+
+${imagePromptFraming(pillar)}`.slice(0, 4_000) };
 }
 
 async function createImage(
@@ -114,7 +145,7 @@ async function createImage(
     body: JSON.stringify({
       model: config.ai.imageModel,
       prompt,
-      size: "1024x1536",
+      size: config.ai.imageSize,
       quality,
       output_format: "jpeg",
       n: 1,
@@ -126,8 +157,10 @@ async function createImage(
   const base64 = parsed.data?.[0]?.b64_json;
   if (!base64) throw new Error("OpenAI Image API rasm ma'lumotini qaytarmadi");
 
-  const imageData = Buffer.from(base64, "base64");
-  const contentType = "image/jpeg";
+  // Model 4:5 o'lchamni qaytara olmaydi; rasmni Instagram feed formatiga o'zimiz keltiramiz.
+  const normalized = await normalizeInstagramImage(Buffer.from(base64, "base64"));
+  const imageData = normalized.data;
+  const contentType = normalized.contentType;
   if (!isSpacesConfigured()) {
     const imageVersion = crypto.randomBytes(8).toString("hex");
     return {
@@ -147,7 +180,10 @@ function draftKeyboard(draftId: string) {
       { text: "✅ Tasdiqlash", callback_data: `draft:approve:${draftId}` },
       { text: "🔄 Qayta yaratish", callback_data: `draft:regen:${draftId}` },
     ],
-    [{ text: "❌ Rad etish", callback_data: `draft:reject:${draftId}` }],
+    [
+      { text: "🎲 Boshqa tur", callback_data: `draft:reroll:${draftId}` },
+      { text: "❌ Rad etish", callback_data: `draft:reject:${draftId}` },
+    ],
   ];
 }
 
@@ -156,11 +192,22 @@ async function notifyDraft(draftId: string): Promise<void> {
     where: { id: draftId },
     include: { project: true },
   });
+  const publishingAccounts = await prisma.instagramAccount.count({
+    where: { projectId: draft.projectId, isActive: true, publishingEnabled: true },
+  });
+  const targets = [
+    publishingAccounts > 0 ? "Instagram" : null,
+    draft.project.telegramPublishEnabled && draft.project.telegramChannelId
+      ? `Telegram: ${draft.project.telegramChannelTitle ?? draft.project.telegramChannelId}`
+      : null,
+  ].filter(Boolean).join(" + ");
   const admins = config.telegram.adminUserIds.length
     ? config.telegram.adminUserIds
     : (config.telegram.chatId ? [config.telegram.chatId] : []);
   const caption = [
     `📝 ${draft.project.name} — ${draft.contentDate}`,
+    `Tur: ${pillarLabel(draft.pillar)}`,
+    `Joylanadi: ${targets || "kanal ulanmagan"}`,
     `Mavzu: ${draft.topic}`,
     `Hook: ${draft.hook}`,
     "",
@@ -177,10 +224,16 @@ async function notifyDraft(draftId: string): Promise<void> {
   }
 }
 
+/** Telegram menyusi uchun mavjud kontent turlari ro'yxati. */
+export function contentPillarOptions(): Array<{ key: string; label: string }> {
+  return CONTENT_PILLARS.map((pillar) => ({ key: pillar.key, label: pillar.label }));
+}
+
 export async function generateDailyContent(
   projectId: string,
   force = false,
   regenerateDraftId?: string,
+  pillarOverride?: string | null,
 ): Promise<string> {
   const project = await prisma.socialProject.findUniqueOrThrow({
     where: { id: projectId },
@@ -202,11 +255,30 @@ export async function generateDailyContent(
         },
       })
     : null;
+  // Kontent turi navbat bilan tanlanadi: lenta faqat reklamadan iborat bo'lib qolmasin.
+  const recentPillars = await prisma.socialContentDraft.findMany({
+    where: { projectId, pillar: { not: null }, ...(regenerationTarget ? { id: { not: regenerationTarget.id } } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: 12,
+    select: { pillar: true },
+  });
+  // "auto" — qayta yaratishda ataylab boshqa tur tanlash uchun; bunda eski tur
+  // eng yaqinda ishlatilgan deb hisoblanadi va qaytadan tanlanmaydi.
+  const rerollPillar = pillarOverride === "auto";
+  const pillarHistory = rerollPillar && regenerationTarget?.pillar
+    ? [regenerationTarget.pillar, ...recentPillars.map((item) => item.pillar)]
+    : recentPillars.map((item) => item.pillar);
+  const pillar = selectPillar(
+    pillarHistory,
+    rerollPillar ? undefined : (pillarOverride ?? regenerationTarget?.pillar),
+  );
+
   const draft = regenerationTarget
     ? await prisma.socialContentDraft.update({
         where: { id: regenerationTarget.id },
         data: {
           status: "GENERATING",
+          pillar: pillar.key,
           lastError: null,
           attempts: 0,
           lockedAt: null,
@@ -222,12 +294,13 @@ export async function generateDailyContent(
           projectId,
           instagramAccountId: project.instagramAccounts[0]?.id,
           contentDate,
+          pillar: pillar.key,
           status: "GENERATING",
         },
       });
 
   try {
-    const plan = await createPlan(projectId);
+    const plan = await createPlan(projectId, pillar);
     const image = await createImage(plan.imagePrompt, project.key, contentDate, draft.id);
     const status = project.autoPublishEnabled && !project.contentApprovalRequired ? "APPROVED" : "REVIEW";
     await prisma.socialContentDraft.update({
@@ -287,6 +360,35 @@ export async function rejectContentDraft(draftId: string): Promise<boolean> {
   return result.count === 1;
 }
 
+/**
+ * Telegram kanalga post. Xabar ketgandan keyin uning id'si albatta bazaga yozilishi kerak,
+ * aks holda keyingi urinishda kanalga ikkinchi marta post tushadi.
+ */
+async function publishDraftToTelegram(
+  draft: { id: string; imageUrl: string; caption: string },
+  channelId: string,
+): Promise<string> {
+  const messageId = await sendTelegramChannelPost(channelId, draft.imageUrl, draft.caption);
+  const stored = messageId ? String(messageId) : `sent-${Date.now()}`;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await prisma.socialContentDraft.update({
+        where: { id: draft.id },
+        data: { telegramMessageId: stored, telegramPostedAt: new Date() },
+      });
+      return stored;
+    } catch (error) {
+      logger.error("Telegram kanal post holati yozilmadi", error, { draftId: draft.id, attempt });
+      if (attempt === 3) {
+        throw new Error("Telegram kanalga post ketdi, lekin holat bazaga yozilmadi. Takroriy post bo'lmasligi uchun jarayon to'xtatildi.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  return stored;
+}
+
+/** Kontent Instagram va/yoki Telegram kanalga joylanadi; ikkalasi ham mustaqil yoqiladi. */
 export async function advanceContentPublish(draftId: string): Promise<void> {
   const now = new Date();
   const claim = await prisma.socialContentDraft.updateMany({
@@ -304,68 +406,89 @@ export async function advanceContentPublish(draftId: string): Promise<void> {
       where: { id: draftId },
       include: { instagramAccount: true, project: true },
     });
-    if (draft.instagramMediaId) {
-      await prisma.socialContentDraft.update({
-        where: { id: draft.id },
-        data: { status: "PUBLISHED", lockedAt: null, lastError: null },
-      });
-      return;
-    }
     if (!draft.imageUrl || !draft.caption) throw new Error("Draft rasm yoki caption'siz");
+    const imageUrl = draft.imageUrl;
+    const caption = draft.caption;
+    const project = draft.project;
+
     const account = draft.instagramAccount ?? await prisma.instagramAccount.findFirst({
       where: { projectId: draft.projectId, isActive: true, publishingEnabled: true },
       orderBy: { createdAt: "asc" },
     });
-    if (!account || !account.publishingEnabled) throw new Error("Loyiha uchun Instagram publishing yoqilmagan");
-    const token = decryptSocialToken(account.accessTokenEncrypted);
+    const instagramTarget = account?.publishingEnabled ? account : null;
+    const telegramChannelId = project.telegramPublishEnabled ? project.telegramChannelId : null;
+    if (!instagramTarget && !telegramChannelId) {
+      throw new Error("Loyiha uchun na Instagram publishing, na Telegram kanal yoqilgan");
+    }
 
-    if (!draft.instagramContainerId) {
-      const container = await instagramJson<{ id: string }>(token, `${encodeURIComponent(account.instagramUserId)}/media`, {
+    // 1) Telegram kanal — bitta chaqiruv, shuning uchun birinchi bajariladi.
+    let telegramMessageId = draft.telegramMessageId;
+    if (telegramChannelId && !telegramMessageId) {
+      telegramMessageId = await publishDraftToTelegram({ id: draft.id, imageUrl, caption }, telegramChannelId);
+    }
+
+    // 2) Instagram — konteyner yaratish, tayyor bo'lishini kutish va publish (bir necha tick).
+    let instagramMediaId = draft.instagramMediaId;
+    if (instagramTarget && !instagramMediaId) {
+      const token = decryptSocialToken(instagramTarget.accessTokenEncrypted);
+
+      if (!draft.instagramContainerId) {
+        const container = await instagramJson<{ id: string }>(token, `${encodeURIComponent(instagramTarget.instagramUserId)}/media`, {
+          method: "POST",
+          body: JSON.stringify({ image_url: imageUrl, caption }),
+        });
+        await prisma.socialContentDraft.update({
+          where: { id: draft.id },
+          data: {
+            status: "PUBLISHING",
+            instagramAccountId: instagramTarget.id,
+            instagramContainerId: container.id,
+            attempts: { increment: 1 },
+            lockedAt: null,
+          },
+        });
+        return;
+      }
+
+      const status = await instagramJson<{ status_code?: string; status?: string }>(
+        token,
+        `${encodeURIComponent(draft.instagramContainerId)}?fields=status_code,status`,
+      );
+      if (status.status_code && status.status_code !== "FINISHED") {
+        if (["ERROR", "EXPIRED"].includes(status.status_code)) throw new Error(status.status ?? `Container ${status.status_code}`);
+        await prisma.socialContentDraft.update({ where: { id: draft.id }, data: { lockedAt: null } });
+        return;
+      }
+
+      const published = await instagramJson<{ id: string }>(token, `${encodeURIComponent(instagramTarget.instagramUserId)}/media_publish`, {
         method: "POST",
-        body: JSON.stringify({ image_url: draft.imageUrl, caption: draft.caption }),
+        body: JSON.stringify({ creation_id: draft.instagramContainerId }),
       });
-      await prisma.socialContentDraft.update({
-        where: { id: draft.id },
-        data: {
-          status: "PUBLISHING",
-          instagramAccountId: account.id,
-          instagramContainerId: container.id,
-          attempts: { increment: 1 },
-          lockedAt: null,
-        },
-      });
-      return;
+      instagramMediaId = published.id;
     }
 
-    const status = await instagramJson<{ status_code?: string; status?: string }>(
-      token,
-      `${encodeURIComponent(draft.instagramContainerId)}?fields=status_code,status`,
-    );
-    if (status.status_code && status.status_code !== "FINISHED") {
-      if (["ERROR", "EXPIRED"].includes(status.status_code)) throw new Error(status.status ?? `Container ${status.status_code}`);
-      await prisma.socialContentDraft.update({ where: { id: draft.id }, data: { lockedAt: null } });
-      return;
-    }
-
-    const published = await instagramJson<{ id: string }>(token, `${encodeURIComponent(account.instagramUserId)}/media_publish`, {
-      method: "POST",
-      body: JSON.stringify({ creation_id: draft.instagramContainerId }),
-    });
     await prisma.socialContentDraft.update({
       where: { id: draft.id },
       data: {
         status: "PUBLISHED",
-        instagramMediaId: published.id,
-        publishedAt: new Date(),
+        instagramMediaId,
+        telegramMessageId,
+        publishedAt: draft.publishedAt ?? new Date(),
         lastError: null,
         lockedAt: null,
+        // Rasm barcha kanallarga ketib bo'ldi; bazadagi nusxa endi kerak emas.
         imageData: null,
       },
     });
+
+    const channels = [
+      instagramMediaId ? `Instagram (ID: ${instagramMediaId})` : null,
+      telegramMessageId ? `Telegram: ${project.telegramChannelTitle ?? project.telegramChannelId}` : null,
+    ].filter(Boolean).join(" + ");
     const admins = config.telegram.adminUserIds.length ? config.telegram.adminUserIds : [config.telegram.chatId].filter(Boolean);
     await Promise.all(admins.map((admin) => sendTelegramMessage(
       admin,
-      `✅ ${draft.project.name}: Instagram posti joylandi. Media ID: ${published.id}`,
+      `✅ ${project.name}: post joylandi — ${channels}`,
     ).catch((error) => logger.error("Publish xabarnomasi Telegram'ga yuborilmadi", error, { draftId, admin }))));
   } catch (error) {
     await prisma.socialContentDraft.updateMany({ where: { id: draftId }, data: { lockedAt: null } });

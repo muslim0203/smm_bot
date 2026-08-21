@@ -6,12 +6,15 @@ import { createInstagramConnectUrl } from "./instagram-oauth.js";
 import {
   advanceContentPublish,
   approveContentDraft,
+  contentPillarOptions,
   generateDailyContent,
   rejectContentDraft,
 } from "./content-engine.js";
+import { findPillar, pillarLabel } from "./content-pillars.js";
 import {
   answerTelegramCallback,
   isTelegramAdmin,
+  resolveTelegramChannel,
   sendTelegramMessage,
 } from "./telegram-api.js";
 import { decryptSocialToken } from "./token-crypto.js";
@@ -33,7 +36,10 @@ const HELP = `Social Control Center buyruqlari:
 /select key — loyihani tanlash
 /accounts — tanlangan loyiha Instagram akkauntlari
 /connect — Instagram Professional akkaunt ulash
-/content — bugungi ssenariy + rasmni yaratish
+/content [tur] — bugungi ssenariy + rasmni yaratish (tur ixtiyoriy)
+/pillars — kontent turlari ro'yxati
+/themes mavzular — kunlik kontent uchun doimiy mavzular
+/channel @kanal — kontentni Telegram kanalga ham joylash (/channel off — o'chirish)
 /queue — kontent navbati
 /schedule HH:MM — kunlik kontent vaqti
 /brand tasdiqlangan faktlar — loyiha faktlarini yangilash
@@ -88,6 +94,8 @@ async function showProject(chatId: string, projectId: string): Promise<void> {
     `📁 ${project.name} (${project.key})`,
     `Sayt: ${project.websiteUrl ?? "—"}`,
     `Kunlik kontent: ${project.contentEnabled ? `ON, ${String(project.dailyContentHour).padStart(2, "0")}:${String(project.dailyContentMinute).padStart(2, "0")}` : "OFF"}`,
+    `Kontent mavzulari: ${project.contentThemes ? project.contentThemes.slice(0, 200) : "kiritilmagan (/themes)"}`,
+    `Telegram kanal: ${project.telegramChannelId ? `${project.telegramChannelTitle ?? project.telegramChannelId} — ${project.telegramPublishEnabled ? "ON" : "OFF"}` : "ulanmagan (/channel)"}`,
     `Approval: ${project.contentApprovalRequired ? "kerak" : "kerak emas"}`,
     `Auto publish: ${project.autoPublishEnabled ? "ON" : "OFF"}`,
     "",
@@ -99,6 +107,9 @@ async function showProject(chatId: string, projectId: string): Promise<void> {
       { text: project.contentEnabled ? "⏸ Kunlik kontent OFF" : "▶️ Kunlik kontent ON", callback_data: `project:content:${project.id}` },
     ],
     [{ text: project.autoPublishEnabled ? "🛑 Auto publish OFF" : "⚠️ Auto publish sozlash", callback_data: `project:auto:${project.id}` }],
+    ...(project.telegramChannelId
+      ? [[{ text: project.telegramPublishEnabled ? "📢 Telegram kanal OFF" : "📢 Telegram kanal ON", callback_data: `project:tgchannel:${project.id}` }]]
+      : []),
     [{ text: "📱 Akkauntlar", callback_data: `project:accounts:${project.id}` }],
   ]);
 }
@@ -130,7 +141,7 @@ async function showQueue(chatId: string, projectId: string): Promise<void> {
     take: 10,
   });
   await sendTelegramMessage(chatId, drafts.length
-    ? drafts.map((draft) => `${draft.contentDate} — ${draft.status} — ${draft.topic ?? "mavzu yo'q"}`).join("\n")
+    ? drafts.map((draft) => `${draft.contentDate} — ${draft.status} — ${pillarLabel(draft.pillar)} — ${draft.topic ?? "mavzu yo'q"}`).join("\n")
     : "Kontent navbati bo'sh.");
 }
 
@@ -246,9 +257,61 @@ async function handleCommand(message: TelegramMessage): Promise<void> {
     const url = await createInstagramConnectUrl(project.id, telegramUserId);
     return sendTelegramMessage(chatId, `${project.name} uchun Instagram Professional akkauntni xavfsiz OAuth orqali ulang. Havola 15 daqiqa amal qiladi.`, [[{ text: "Instagram ulash", url }]]);
   }
+  if (command === "/pillars") {
+    return sendTelegramMessage(chatId, [
+      "Kontent turlari (navbat bilan avtomatik tanlanadi):",
+      ...contentPillarOptions().map((pillar) => `${pillar.label} — /content ${pillar.key}`),
+      "",
+      "Reklama posti har 6 ta kontentda ko'pi bilan bir marta chiqadi.",
+    ].join("\n"));
+  }
+  if (command === "/themes") {
+    const themes = raw.slice(commandRaw.length).trim();
+    if (themes.length < 10) {
+      return sendTelegramMessage(chatId, [
+        "Kunlik kontent uchun doimiy mavzularni kiriting.",
+        "Masalan: /themes arab tili grammatikasi, CEFR imtihon formati, kundalik iboralar, arab madaniyati, so'z etimologiyasi",
+        "",
+        `Hozirgi mavzular: ${project.contentThemes ?? "kiritilmagan"}`,
+      ].join("\n"));
+    }
+    await prisma.socialProject.update({ where: { id: project.id }, data: { contentThemes: themes.slice(0, 4_000) } });
+    return sendTelegramMessage(chatId, "✅ Kontent mavzulari yangilandi. Endi kunlik postlar shu mavzular atrofida bo'ladi.");
+  }
+  if (command === "/channel") {
+    const target = args[0]?.trim();
+    if (target === "off") {
+      await prisma.socialProject.update({ where: { id: project.id }, data: { telegramPublishEnabled: false } });
+      return sendTelegramMessage(chatId, "📢 Telegram kanalga joylash o'chirildi. Kanal sozlamasi saqlanib qoldi.");
+    }
+    if (!target) {
+      return sendTelegramMessage(chatId, [
+        "Format: /channel @kanal_username yoki /channel -1001234567890",
+        "Avval botni kanalga administrator qilib qo'shing va \"Post messages\" huquqini bering.",
+        "",
+        `Hozirgi kanal: ${project.telegramChannelId ? `${project.telegramChannelTitle ?? project.telegramChannelId} (${project.telegramPublishEnabled ? "ON" : "OFF"})` : "ulanmagan"}`,
+        "O'chirish uchun: /channel off",
+      ].join("\n"));
+    }
+    const chat = await resolveTelegramChannel(target.startsWith("@") || target.startsWith("-") ? target : `@${target}`);
+    await prisma.socialProject.update({
+      where: { id: project.id },
+      data: {
+        telegramChannelId: String(chat.id),
+        telegramChannelTitle: chat.title ?? (chat.username ? `@${chat.username}` : String(chat.id)),
+        telegramPublishEnabled: true,
+      },
+    });
+    return sendTelegramMessage(chatId, `✅ ${chat.title ?? target} kanali ulandi. Tasdiqlangan kontent endi Instagram bilan birga shu kanalga ham joylanadi.`);
+  }
   if (command === "/content") {
-    await sendTelegramMessage(chatId, "⏳ Ssenariy va rasm yaratilmoqda. Tayyor bo'lganda approval kartasi keladi.");
-    void generateDailyContent(project.id, true).catch((error) => sendTelegramMessage(chatId, `❌ Kontent yaratilmadi: ${error instanceof Error ? error.message : String(error)}`));
+    const requested = args[0]?.toLowerCase();
+    if (requested && !findPillar(requested)) {
+      return sendTelegramMessage(chatId, `Bunday kontent turi yo'q. /pillars orqali ro'yxatni ko'ring.`);
+    }
+    await sendTelegramMessage(chatId, `⏳ ${requested ? pillarLabel(requested) + " " : ""}kontenti yaratilmoqda. Tayyor bo'lganda approval kartasi keladi.`);
+    void generateDailyContent(project.id, true, undefined, requested)
+      .catch((error) => sendTelegramMessage(chatId, `❌ Kontent yaratilmadi: ${error instanceof Error ? error.message : String(error)}`));
     return;
   }
   await sendTelegramMessage(chatId, HELP);
@@ -283,6 +346,16 @@ async function handleCallback(callback: TelegramCallback): Promise<void> {
       return showProject(chatId, id);
     }
     if (action === "accounts") return showAccounts(chatId, id);
+    if (action === "tgchannel") {
+      if (!project.telegramChannelId) {
+        return sendTelegramMessage(chatId, "Avval /channel @kanal orqali kanalni ulang.");
+      }
+      await prisma.socialProject.update({
+        where: { id },
+        data: { telegramPublishEnabled: !project.telegramPublishEnabled },
+      });
+      return showProject(chatId, id);
+    }
     if (action === "auto") {
       if (project.autoPublishEnabled) {
         await prisma.socialProject.update({ where: { id }, data: { autoPublishEnabled: false, contentApprovalRequired: true } });
@@ -338,6 +411,10 @@ async function handleCallback(callback: TelegramCallback): Promise<void> {
     if (action === "regen") {
       await sendTelegramMessage(chatId, "🔄 Kontent qayta yaratilmoqda...");
       void generateDailyContent(draft.projectId, true, draft.id).catch((error) => sendTelegramMessage(chatId, `❌ ${error instanceof Error ? error.message : String(error)}`));
+    }
+    if (action === "reroll") {
+      await sendTelegramMessage(chatId, "🎲 Boshqa turdagi kontent yaratilmoqda...");
+      void generateDailyContent(draft.projectId, true, draft.id, "auto").catch((error) => sendTelegramMessage(chatId, `❌ ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 

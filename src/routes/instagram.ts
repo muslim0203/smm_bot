@@ -121,43 +121,106 @@ instagramRoutes.post("/webhook", async (req: RawBodyRequest, res) => {
     return;
   }
 
-  const events = parseInstagramWebhook(req.body, config.instagram.userId);
-  if (events.length > 0) {
-    const accountUserIds = [...new Set(events.map((event) => event.accountInstagramUserId))];
-    const accounts = await prisma.instagramAccount.findMany({
-      where: { instagramUserId: { in: accountUserIds }, isActive: true },
-      select: { id: true, instagramUserId: true },
-    });
-    const accountMap = new Map(accounts.map((account) => [account.instagramUserId, account.id]));
-    const accepted: Array<{
-      accountId: string | null;
-      eventKey: string;
-      eventType: "DM" | "COMMENT";
-      senderId: string;
-      senderUsername?: string;
-      objectId: string;
-      message: string;
-    }> = [];
-    for (const { accountInstagramUserId, ...event } of events) {
-      const accountId = accountMap.get(accountInstagramUserId);
-      if (accountId) {
-        accepted.push({ ...event, accountId });
-        continue;
-      }
-      // Eski bitta-akkaunt env konfiguratsiyasi migratsiya davrida ishlashda davom etadi.
-      if (accountInstagramUserId === config.instagram.userId) accepted.push({ ...event, accountId: null });
-    }
-
-    if (accepted.length > 0) {
-      await prisma.instagramInboxEvent.createMany({ data: accepted, skipDuplicates: true });
-      await prisma.instagramAccount.updateMany({
-        where: { id: { in: accepted.flatMap((event) => event.accountId ? [event.accountId] : []) } },
-        data: { lastWebhookAt: new Date() },
-      });
-      logger.info("Instagram webhook navbatga qo'shildi", { received: accepted.length });
-    }
+  try {
+    await ingestInstagramWebhook(req.body);
+  } catch (error) {
+    // Meta'ga 200 qaytarmasak, u xuddi shu hodisani qayta-qayta yuboradi va
+    // mijoz bitta xabariga bir nechta javob ketishi mumkin. Xatoni faqat logga yozamiz.
+    logger.error("Instagram webhook navbatga qo'shilmadi", error);
   }
 
   // Meta callbackni tez 200 bilan tasdiqlaymiz; AI javobni worker alohida yuboradi.
   res.status(200).json({ received: true });
 });
+
+type AcceptedEvent = {
+  accountId: string | null;
+  eventKey: string;
+  eventType: "DM" | "COMMENT";
+  senderId: string;
+  senderUsername?: string;
+  objectId: string;
+  parentId?: string;
+  message: string;
+};
+
+const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+
+async function ingestInstagramWebhook(payload: unknown): Promise<void> {
+  // Ulangan barcha akkauntlar "o'zimiz" hisoblanadi: bot yozgan javob ham
+  // yangi comment webhook'i sifatida qaytadi va uni qayta ishlasak, bot o'zi
+  // bilan yozishib bitta kommentga bir nechta javob yozib qo'yadi.
+  const accounts = await prisma.instagramAccount.findMany({
+    where: { isActive: true },
+    select: { id: true, instagramUserId: true },
+  });
+  const selfIds = accounts.map((account) => account.instagramUserId);
+  if (config.instagram.userId) selfIds.push(config.instagram.userId);
+
+  const events = parseInstagramWebhook(payload, selfIds);
+  if (events.length === 0) return;
+
+  const accountMap = new Map(accounts.map((account) => [account.instagramUserId, account.id]));
+  const accepted: AcceptedEvent[] = [];
+  for (const { accountInstagramUserId, ...event } of events) {
+    const accountId = accountMap.get(accountInstagramUserId);
+    if (accountId) {
+      accepted.push({ ...event, accountId });
+      continue;
+    }
+    // Eski bitta-akkaunt env konfiguratsiyasi migratsiya davrida ishlashda davom etadi.
+    if (accountInstagramUserId === config.instagram.userId) accepted.push({ ...event, accountId: null });
+  }
+  if (accepted.length === 0) return;
+
+  const fresh = await withoutDuplicates(accepted);
+  if (fresh.length === 0) {
+    logger.info("Instagram webhook takrori tashlandi", { skipped: accepted.length });
+    return;
+  }
+
+  await prisma.instagramInboxEvent.createMany({ data: fresh, skipDuplicates: true });
+  await prisma.instagramAccount.updateMany({
+    where: { id: { in: fresh.flatMap((event) => event.accountId ? [event.accountId] : []) } },
+    data: { lastWebhookAt: new Date() },
+  });
+  logger.info("Instagram webhook navbatga qo'shildi", {
+    received: fresh.length,
+    skipped: accepted.length - fresh.length,
+  });
+}
+
+/**
+ * Meta bir hodisani bir necha marta (ba'zan boshqa mid/comment id bilan) yuborishi mumkin.
+ * Shuning uchun event_key unikaligidan tashqari yana ikki tekshiruv bor:
+ * 1) bu comment id aslida bizning javobimiz emasmi;
+ * 2) shu foydalanuvchidan xuddi shu matn oxirgi 10 daqiqada kelmaganmi.
+ */
+async function withoutDuplicates(accepted: AcceptedEvent[]): Promise<AcceptedEvent[]> {
+  const objectIds = accepted.map((event) => event.objectId);
+  const parentIds = accepted.flatMap((event) => event.parentId ? [event.parentId] : []);
+  const ownReplies = await prisma.instagramInboxEvent.findMany({
+    where: { replyObjectId: { in: [...new Set([...objectIds, ...parentIds])] } },
+    select: { replyObjectId: true },
+  });
+  const ownReplyIds = new Set(ownReplies.flatMap((item) => item.replyObjectId ? [item.replyObjectId] : []));
+
+  const recent = await prisma.instagramInboxEvent.findMany({
+    where: {
+      senderId: { in: [...new Set(accepted.map((event) => event.senderId))] },
+      createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+    },
+    select: { accountId: true, senderId: true, eventType: true, message: true, objectId: true },
+  });
+  const seen = new Set(recent.map((item) => `${item.accountId ?? ""}|${item.senderId}|${item.eventType}|${item.message}`));
+
+  const fresh: AcceptedEvent[] = [];
+  for (const event of accepted) {
+    if (ownReplyIds.has(event.objectId)) continue;
+    const fingerprint = `${event.accountId ?? ""}|${event.senderId}|${event.eventType}|${event.message}`;
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    fresh.push(event);
+  }
+  return fresh;
+}

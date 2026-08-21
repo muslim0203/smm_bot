@@ -52,6 +52,50 @@ async function claimEvents(): Promise<ClaimedEvent[]> {
   return claimed;
 }
 
+/**
+ * Javob yuborilgandan keyin statusni yozib qo'yish — takroriy javobning oldini olishdagi
+ * eng muhim qadam. Bazaga yozilmasa, worker lock eskirib hodisa qaytadan navbatga tushadi
+ * va mijoz ikkinchi (uchinchi) javobni oladi. Shu sababli bir necha marta urinamiz.
+ */
+async function finalizeEvent(eventId: string, data: Prisma.InstagramInboxEventUpdateInput): Promise<void> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await prisma.instagramInboxEvent.update({
+        where: { id: eventId },
+        data: { ...data, lockedAt: null, processedAt: new Date() },
+      });
+      return;
+    } catch (error) {
+      logger.error("Instagram hodisa statusi yozilmadi", error, { eventId, attempt });
+      if (attempt === 3) return;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+}
+
+/**
+ * Bitta mijozga qisqa vaqt ichida ketma-ket avtomatik javob yozib yubormaslik uchun
+ * qo'shimcha to'siq: bir xil matn takrorlansa e'tiborsiz qoldiramiz, limitdan oshsa
+ * suhbatni operatorga topshiramiz.
+ */
+async function throttleDecision(event: ClaimedEvent): Promise<"ok" | "duplicate" | "throttled"> {
+  const windowStart = new Date(Date.now() - config.instagram.replyWindowMs);
+  const recentReplies = await prisma.instagramInboxEvent.findMany({
+    where: {
+      id: { not: event.id },
+      accountId: event.accountId,
+      senderId: event.senderId,
+      eventType: event.eventType,
+      status: "REPLIED",
+      processedAt: { gte: windowStart },
+    },
+    select: { message: true },
+  });
+
+  if (recentReplies.some((item) => item.message === event.message)) return "duplicate";
+  return recentReplies.length >= config.instagram.maxRepliesPerSender ? "throttled" : "ok";
+}
+
 async function processEvent(event: ClaimedEvent): Promise<void> {
   const eventType = event.eventType === "COMMENT" ? "COMMENT" as const : "DM" as const;
   const account = event.account;
@@ -68,6 +112,34 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
       where: { id: event.id },
       data: { status: "IGNORED", lockedAt: null, processedAt: new Date(), lastError: "Kanal uchun autojavob o'chirilgan" },
     });
+    return;
+  }
+
+  const throttle = await throttleDecision(event);
+  if (throttle === "duplicate") {
+    await prisma.instagramInboxEvent.update({
+      where: { id: event.id },
+      data: {
+        status: "IGNORED",
+        lockedAt: null,
+        processedAt: new Date(),
+        lastError: "Takroriy xabar — javob allaqachon yuborilgan",
+      },
+    });
+    logger.info("Instagram takroriy xabariga javob yozilmadi", { eventId: event.id, eventType });
+    return;
+  }
+  if (throttle === "throttled") {
+    await prisma.instagramInboxEvent.update({
+      where: { id: event.id },
+      data: {
+        status: "HANDOFF",
+        lockedAt: null,
+        processedAt: new Date(),
+        lastError: "Avtomatik javob limiti — suhbat operatorga topshirildi",
+      },
+    });
+    await notifyHandoff(event, "Qisqa vaqtda ko'p xabar keldi");
     return;
   }
 
@@ -99,18 +171,15 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
   if (decision.decision === "handoff") {
     // DM'da foydalanuvchini javobsiz qoldirmaymiz; ommaviy kommentga esa
     // nozik vaziyatlarda avtomatik matn yozmaymiz.
-    if (eventType === "DM" && decision.reply) {
-      await sendInstagramDm(event.senderId, decision.reply, credential);
-    }
-    await prisma.instagramInboxEvent.update({
-      where: { id: event.id },
-      data: {
-        status: "HANDOFF",
-        replyText: decision.reply,
-        lockedAt: null,
-        processedAt: new Date(),
-        lastError: decision.reason,
-      },
+    const handoffReplyId = eventType === "DM" && decision.reply
+      ? await sendInstagramDm(event.senderId, decision.reply, credential)
+      : undefined;
+    // Javob ketgan bo'lsa, status yozilmasa ham qayta yubormaymiz.
+    await finalizeEvent(event.id, {
+      status: "HANDOFF",
+      replyText: decision.reply,
+      replyObjectId: handoffReplyId ?? null,
+      lastError: decision.reason,
     });
     logger.warn("Instagram xabari operatorga yo'naltirildi", {
       eventId: event.id,
@@ -123,12 +192,16 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
   }
 
   const reply = decision.reply!;
-  if (eventType === "DM") await sendInstagramDm(event.senderId, reply, credential);
-  else await replyToInstagramComment(event.objectId, reply, credential);
+  const replyObjectId = eventType === "DM"
+    ? await sendInstagramDm(event.senderId, reply, credential)
+    : await replyToInstagramComment(event.objectId, reply, credential);
 
-  await prisma.instagramInboxEvent.update({
-    where: { id: event.id },
-    data: { status: "REPLIED", replyText: reply, lockedAt: null, processedAt: new Date(), lastError: null },
+  // Bu nuqtadan keyin xato bo'lsa ham qayta yubormaymiz: javob Instagram'ga ketib bo'lgan.
+  await finalizeEvent(event.id, {
+    status: "REPLIED",
+    replyText: reply,
+    replyObjectId: replyObjectId ?? null,
+    lastError: null,
   });
 }
 

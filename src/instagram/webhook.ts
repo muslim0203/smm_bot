@@ -7,6 +7,7 @@ export type InstagramInboundEvent = {
   senderId: string;
   senderUsername?: string;
   objectId: string;
+  parentId?: string;
   message: string;
 };
 
@@ -20,6 +21,12 @@ function record(value: unknown): UnknownRecord | null {
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function selfIdSet(selfIds?: string | Iterable<string>): Set<string> {
+  if (!selfIds) return new Set();
+  if (typeof selfIds === "string") return new Set(selfIds ? [selfIds] : []);
+  return new Set([...selfIds].filter(Boolean));
 }
 
 /** Meta yuborgan xom body'ni X-Hub-Signature-256 bilan tekshiradi. */
@@ -40,14 +47,20 @@ export function verifyInstagramSignature(
 /**
  * Instagram Login va Facebook Login webhooklarining bizga kerakli umumiy qismini
  * normalizatsiya qiladi. Echo/self, o'chirilgan va matnsiz hodisalar ataylab olinmaydi.
+ *
+ * MUHIM: `entry.id` — hodisa kelgan biznes akkauntning o'zi. Botning o'z javobi ham
+ * yangi comment webhook'ini keltirib chiqaradi; uni filtrlamasak bot o'zi bilan
+ * yozishib, bitta kommentga bir nechta javob yozib ketadi. Shu sababli har bir
+ * entry uchun `entry.id` ham, chaqiruvchi bergan `selfIds` ham hisobga olinadi.
  */
 export function parseInstagramWebhook(
   payload: unknown,
-  ownInstagramUserId?: string,
+  selfIds?: string | Iterable<string>,
 ): InstagramInboundEvent[] {
   const root = record(payload);
   if (!root || root.object !== "instagram" || !Array.isArray(root.entry)) return [];
 
+  const knownSelfIds = selfIdSet(selfIds);
   const result: InstagramInboundEvent[] = [];
 
   for (const rawEntry of root.entry) {
@@ -55,6 +68,9 @@ export function parseInstagramWebhook(
     if (!entry) continue;
     const accountInstagramUserId = text(entry.id);
     if (!accountInstagramUserId) continue;
+
+    const isSelf = (senderId: string) =>
+      senderId === accountInstagramUserId || knownSelfIds.has(senderId);
 
     if (Array.isArray(entry.messaging)) {
       for (const rawMessaging of entry.messaging) {
@@ -68,7 +84,7 @@ export function parseInstagramWebhook(
         if (
           !senderId || !messageId || !messageText ||
           message?.is_echo === true || message?.is_self === true || message?.is_deleted === true ||
-          (ownInstagramUserId && senderId === ownInstagramUserId)
+          isSelf(senderId)
         ) continue;
 
         result.push({
@@ -92,11 +108,9 @@ export function parseInstagramWebhook(
         const senderId = text(from?.id);
         const commentId = text(value?.id) ?? text(value?.comment_id);
         const commentText = text(value?.text) ?? text(value?.message);
+        const parentId = text(record(value?.parent)?.id) ?? text(value?.parent_id);
 
-        if (
-          !senderId || !commentId || !commentText ||
-          (ownInstagramUserId && senderId === ownInstagramUserId)
-        ) continue;
+        if (!senderId || !commentId || !commentText || isSelf(senderId)) continue;
 
         result.push({
           accountInstagramUserId,
@@ -105,6 +119,7 @@ export function parseInstagramWebhook(
           senderId,
           senderUsername: text(from?.username),
           objectId: commentId,
+          ...(parentId ? { parentId } : {}),
           message: commentText.slice(0, 4_000),
         });
       }
