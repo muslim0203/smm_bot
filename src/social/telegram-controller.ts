@@ -262,7 +262,7 @@ async function handleCommand(message: TelegramMessage): Promise<void> {
       "Kontent turlari (navbat bilan avtomatik tanlanadi):",
       ...contentPillarOptions().map((pillar) => `${pillar.label} — /content ${pillar.key}`),
       "",
-      "Reklama posti har 6 ta kontentda ko'pi bilan bir marta chiqadi.",
+      "Reklama posti har 8 ta kontentda ko'pi bilan bir marta chiqadi.",
     ].join("\n"));
   }
   if (command === "/themes") {
@@ -270,7 +270,7 @@ async function handleCommand(message: TelegramMessage): Promise<void> {
     if (themes.length < 10) {
       return sendTelegramMessage(chatId, [
         "Kunlik kontent uchun doimiy mavzularni kiriting.",
-        "Masalan: /themes arab tili grammatikasi, CEFR imtihon formati, kundalik iboralar, arab madaniyati, so'z etimologiyasi",
+        "Masalan: /themes CEFR B2 reading va listening strategiyasi, B2 writing/speaking qoliplari, akademik lug'at va kollokatsiyalar, parafraz, bog'lovchilar, xato tahlili, timed practice",
         "",
         `Hozirgi mavzular: ${project.contentThemes ?? "kiritilmagan"}`,
       ].join("\n"));

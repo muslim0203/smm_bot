@@ -42,5 +42,9 @@ describe("Kontent ustunlari", () => {
       expect(pillar.imageStyle.length).toBeGreaterThan(10);
     }
     expect(CONTENT_PILLARS.filter((pillar) => pillar.promotional)).toHaveLength(1);
+    expect(PROMO_EVERY).toBeGreaterThanOrEqual(8);
+    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "lesson")?.goal).toContain("B2");
+    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "vocabulary")?.goal).toContain("B2");
+    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "exam")?.goal).toContain("B2");
   });
 });

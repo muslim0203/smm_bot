@@ -96,6 +96,14 @@ ${project.contentThemes ? `Doimiy kontent mavzulari (asosiy manba shu):
 ${project.contentThemes}` : ""}
 Sayt: ${project.websiteUrl ?? "ko'rsatilmagan"}
 
+AUDITORIYA DARAJASI: CEFR B2 (upper-intermediate).
+QAT'IY CHEGARA: alifbo, harflar, salomlashish, sonlar, ranglar, hafta kunlari, oddiy "menda bor",
+boshlang'ich olmoshlar va yakka A1-A2 so'zlar asosiy mavzu bo'lmasin. Bunday birlik faqat B2 grammatik
+noziklik, kollokatsiya, registr, parafraz yoki murakkab kontekstni tushuntirish uchun kerak bo'lsa ishlatiladi.
+Har bir foydali post o'quvchiga saqlab qo'yishga arziydigan aniq natija bersin: B2 qolip, kollokatsiya,
+imtihon strategiyasi, xato tahlili, writing/speaking strukturasi yoki reading/listening kaliti.
+Arabcha misollar grammatik va imloviy jihatdan to'g'ri, tabiiy kontekstda bo'lsin; o'zbekcha izoh aniq bo'lsin.
+
 BUGUNGI KONTENT TURI: ${pillar.label}
 Maqsad: ${pillar.goal}
 Ssenariy talabi: ${pillar.scriptGuide}
@@ -110,6 +118,8 @@ Caption auditoriya tilida (asosan o'zbekcha), tabiiy va jonli bo'lsin, 3-7 ta re
 Image prompt ingliz tilida yozilsin. Posterda ko'rinadigan matnlarni aynan qo'shtirnoqda bering;
 matnlarning o'zi auditoriya tilida bo'lsin (kerak bo'lsa arabcha so'z ham bo'lishi mumkin).
 Ko'pi bilan uchta matn bloki bo'lsin va ular kontent turiga mos kelsin.
+Vizual kattalar uchun professional, zamonaviy editorial/education brand uslubida bo'lsin; bolalarcha clipart,
+multfilm, boshlang'ich darslik estetikasi, tasodifiy arab odam portreti yoki mazmunga aloqasiz masjid rasmi bo'lmasin.
 Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePrompt":"..."}.`,
       },
       {
