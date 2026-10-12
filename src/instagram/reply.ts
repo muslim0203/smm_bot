@@ -145,6 +145,21 @@ export async function sendInstagramDm(
   });
 }
 
+/**
+ * Komment muallifiga shaxsiy javob (private reply). Instagram har bir kommentga
+ * bittagina private reply ruxsat beradi va u 7 kun ichida yuborilishi kerak.
+ */
+export async function sendInstagramPrivateReply(
+  commentId: string,
+  message: string,
+  credential: InstagramCredential,
+): Promise<string | undefined> {
+  return instagramPost(credential, `${encodeURIComponent(credential.instagramUserId)}/messages`, {
+    recipient: { comment_id: commentId },
+    message: { text: message },
+  });
+}
+
 export async function replyToInstagramComment(
   commentId: string,
   message: string,

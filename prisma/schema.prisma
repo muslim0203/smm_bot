@@ -64,6 +64,7 @@ model SocialProject {
   contentDrafts     SocialContentDraft[]
   telegramSessions  TelegramSocialSession[]
   oauthStates       InstagramOAuthState[]
+  keywordTriggers   InstagramKeywordTrigger[]
 
   @@map("social_projects")
 }
@@ -160,4 +161,21 @@ model InstagramOAuthState {
 
   @@index([expiresAt, usedAt])
   @@map("instagram_oauth_states")
+}
+
+/// Kommentda kalit so'z yozilsa, muallifga belgilangan matn private reply (DM) bo'lib ketadi.
+model InstagramKeywordTrigger {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  keyword      String
+  dmText       String   @map("dm_text")
+  commentReply String?  @map("comment_reply")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  project SocialProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, keyword])
+  @@map("instagram_keyword_triggers")
 }

@@ -2,7 +2,14 @@ import type { Prisma } from "@prisma/client";
 import { config } from "../config.js";
 import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
-import { decideInstagramReply, replyToInstagramComment, sendInstagramDm } from "./reply.js";
+import { matchKeywordTrigger } from "./keyword.js";
+import {
+  decideInstagramReply,
+  replyToInstagramComment,
+  sendInstagramDm,
+  sendInstagramPrivateReply,
+  type InstagramCredential,
+} from "./reply.js";
 import { decryptSocialToken } from "../social/token-crypto.js";
 import { sendTelegramMessage } from "../social/telegram-api.js";
 
@@ -102,6 +109,9 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
   const credential = account
     ? { instagramUserId: account.instagramUserId, accessToken: decryptSocialToken(account.accessTokenEncrypted) }
     : { instagramUserId: config.instagram.userId, accessToken: config.instagram.accessToken };
+
+  // Kalit so'z triggeri AI komment javobidan mustaqil: comment autojavob o'chiq bo'lsa ham ishlaydi.
+  if (eventType === "COMMENT" && account?.isActive && await handleKeywordTrigger(event, credential)) return;
 
   if (
     (account ? !account.isActive : false) ||
@@ -203,6 +213,54 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
     replyObjectId: replyObjectId ?? null,
     lastError: null,
   });
+}
+
+/**
+ * Kommentda loyiha kalit so'zi bo'lsa, muallifga belgilangan matnni private reply qiladi.
+ * Bir odamga bir trigger matni faqat bir marta ketadi, qayta yozsa komment e'tiborsiz qoladi.
+ * true qaytarsa, hodisa shu yerda yakunlangan.
+ */
+async function handleKeywordTrigger(event: ClaimedEvent, credential: InstagramCredential): Promise<boolean> {
+  const projectId = event.account?.projectId;
+  if (!projectId) return false;
+  const triggers = await prisma.instagramKeywordTrigger.findMany({ where: { projectId, isActive: true } });
+  const trigger = matchKeywordTrigger(event.message, triggers);
+  if (!trigger) return false;
+
+  const alreadySent = await prisma.instagramInboxEvent.findFirst({
+    where: {
+      id: { not: event.id },
+      accountId: event.accountId,
+      senderId: event.senderId,
+      eventType: "COMMENT",
+      status: "REPLIED",
+      replyText: trigger.dmText,
+    },
+    select: { id: true },
+  });
+  if (alreadySent) {
+    await finalizeEvent(event.id, { status: "IGNORED", lastError: `${trigger.keyword}: matn avval yuborilgan` });
+    return true;
+  }
+
+  const replyObjectId = await sendInstagramPrivateReply(event.objectId, trigger.dmText, credential);
+  // DM ketdi: bundan keyingi xato qayta yuborishga olib kelmasin.
+  await finalizeEvent(event.id, {
+    status: "REPLIED",
+    replyText: trigger.dmText,
+    replyObjectId: replyObjectId ?? null,
+    lastError: null,
+  });
+
+  if (trigger.commentReply) {
+    try {
+      await replyToInstagramComment(event.objectId, trigger.commentReply, credential);
+    } catch (error) {
+      logger.error("Kalit so'z kommentiga ochiq javob yozilmadi", error, { eventId: event.id });
+    }
+  }
+  logger.info("Kalit so'z bo'yicha DM yuborildi", { eventId: event.id, keyword: trigger.keyword });
+  return true;
 }
 
 async function notifyHandoff(event: ClaimedEvent, reason?: string): Promise<void> {

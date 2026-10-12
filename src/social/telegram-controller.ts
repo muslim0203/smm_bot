@@ -44,6 +44,9 @@ const HELP = `Social Control Center buyruqlari:
 /schedule HH:MM — kunlik kontent vaqti
 /brand tasdiqlangan faktlar — loyiha faktlarini yangilash
 /voice brend ohangi — AI yozuv uslubini yangilash
+/keyword KALIT DM matni || ochiq javob — kommentda KALIT yozganlarga DM (ochiq javob ixtiyoriy)
+/keywords — kalit so'zlar ro'yxati
+/keyword_off KALIT — kalit so'zni o'chirish
 /status — tanlangan loyiha holati
 /help — yordam
 
@@ -303,6 +306,44 @@ async function handleCommand(message: TelegramMessage): Promise<void> {
       },
     });
     return sendTelegramMessage(chatId, `✅ ${chat.title ?? target} kanali ulandi. Tasdiqlangan kontent endi Instagram bilan birga shu kanalga ham joylanadi.`);
+  }
+  if (command === "/keywords") {
+    const triggers = await prisma.instagramKeywordTrigger.findMany({
+      where: { projectId: project.id },
+      orderBy: { createdAt: "asc" },
+    });
+    return sendTelegramMessage(chatId, triggers.length
+      ? triggers.map((trigger) => `${trigger.isActive ? "🟢" : "⚪️"} ${trigger.keyword} — ${trigger.dmText.slice(0, 80)}${trigger.dmText.length > 80 ? "…" : ""}${trigger.commentReply ? `\n   ochiq javob: ${trigger.commentReply}` : ""}`).join("\n")
+      : "Kalit so'z yo'q. Qo'shish: /keyword MAQOLA DM matni || ochiq javob");
+  }
+  if (command === "/keyword_off") {
+    const keyword = args[0]?.toUpperCase();
+    const result = keyword
+      ? await prisma.instagramKeywordTrigger.updateMany({ where: { projectId: project.id, keyword }, data: { isActive: false } })
+      : { count: 0 };
+    return sendTelegramMessage(chatId, result.count ? `⚪️ ${keyword} o'chirildi.` : "Kalit so'z topilmadi. /keywords orqali ro'yxatni ko'ring.");
+  }
+  if (command === "/keyword") {
+    const keyword = args[0]?.toUpperCase() ?? "";
+    // Matnni raw'dan olamiz: qator tashlashlar DM'da saqlanishi kerak.
+    const body = raw.slice(commandRaw.length).trim().slice(args[0]?.length ?? 0).trim();
+    const [dmText, commentReply] = body.split("||").map((part) => part.trim());
+    if (!/^[A-Z0-9]{2,30}$/.test(keyword) || !dmText) {
+      return sendTelegramMessage(chatId, [
+        "Format: /keyword MAQOLA DM matni || izohga ochiq javob",
+        "Kalit so'z: bitta so'z, lotin harflari, tutuq belgisisiz. Kichik harf va kirill (мақола) avtomatik mos keladi.",
+        "\"||\" dan keyingi ochiq javob ixtiyoriy.",
+      ].join("\n"));
+    }
+    if (dmText.length > 1_000) {
+      return sendTelegramMessage(chatId, `DM matni ${dmText.length} belgi. Instagram 1000 belgidan uzun xabarni qabul qilmaydi.`);
+    }
+    await prisma.instagramKeywordTrigger.upsert({
+      where: { projectId_keyword: { projectId: project.id, keyword } },
+      create: { projectId: project.id, keyword, dmText, commentReply: commentReply || null },
+      update: { dmText, commentReply: commentReply || null, isActive: true },
+    });
+    return sendTelegramMessage(chatId, `🟢 ${keyword}: kommentda shu so'z yozilsa, muallifga DM ketadi (${dmText.length} belgi)${commentReply ? " va izohga ochiq javob yoziladi" : ""}.`);
   }
   if (command === "/content") {
     const requested = args[0]?.toLowerCase();
