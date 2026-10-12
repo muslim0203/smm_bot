@@ -43,8 +43,11 @@ describe("Kontent ustunlari", () => {
     }
     expect(CONTENT_PILLARS.filter((pillar) => pillar.promotional)).toHaveLength(1);
     expect(PROMO_EVERY).toBeGreaterThanOrEqual(8);
-    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "lesson")?.goal).toContain("B2");
-    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "vocabulary")?.goal).toContain("B2");
-    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "exam")?.goal).toContain("B2");
+    // Ilmiy xizmatlar auditoriyasi: arab tili (B2) mavzulari qaytib kelmasin.
+    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "lesson")?.goal).toContain("Ilmiy");
+    expect(CONTENT_PILLARS.find((pillar) => pillar.key === "exam")?.goal).toContain("OAK");
+    for (const pillar of CONTENT_PILLARS) {
+      expect(`${pillar.goal} ${pillar.scriptGuide} ${pillar.imageStyle}`).not.toMatch(/arabcha|CEFR|\bB2\b/);
+    }
   });
 });

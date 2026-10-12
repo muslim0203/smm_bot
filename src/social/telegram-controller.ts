@@ -273,7 +273,7 @@ async function handleCommand(message: TelegramMessage): Promise<void> {
     if (themes.length < 10) {
       return sendTelegramMessage(chatId, [
         "Kunlik kontent uchun doimiy mavzularni kiriting.",
-        "Masalan: /themes CEFR B2 reading va listening strategiyasi, B2 writing/speaking qoliplari, akademik lug'at va kollokatsiyalar, parafraz, bog'lovchilar, xato tahlili, timed practice",
+        "Masalan: /themes OAK jurnaliga maqola, annotatsiya va iqtibos, antiplagiat, BMI va magistrlik dissertatsiyasi, o'quv qo'llanma ekspertizasi, monografiya",
         "",
         `Hozirgi mavzular: ${project.contentThemes ?? "kiritilmagan"}`,
       ].join("\n"));

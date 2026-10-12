@@ -96,13 +96,12 @@ ${project.contentThemes ? `Doimiy kontent mavzulari (asosiy manba shu):
 ${project.contentThemes}` : ""}
 Sayt: ${project.websiteUrl ?? "ko'rsatilmagan"}
 
-AUDITORIYA DARAJASI: CEFR B2 (upper-intermediate).
-QAT'IY CHEGARA: alifbo, harflar, salomlashish, sonlar, ranglar, hafta kunlari, oddiy "menda bor",
-boshlang'ich olmoshlar va yakka A1-A2 so'zlar asosiy mavzu bo'lmasin. Bunday birlik faqat B2 grammatik
-noziklik, kollokatsiya, registr, parafraz yoki murakkab kontekstni tushuntirish uchun kerak bo'lsa ishlatiladi.
-Har bir foydali post o'quvchiga saqlab qo'yishga arziydigan aniq natija bersin: B2 qolip, kollokatsiya,
-imtihon strategiyasi, xato tahlili, writing/speaking strukturasi yoki reading/listening kaliti.
-Arabcha misollar grammatik va imloviy jihatdan to'g'ri, tabiiy kontekstda bo'lsin; o'zbekcha izoh aniq bo'lsin.
+AUDITORIYA: OTM o'qituvchilari (attestatsiya va o'quv adabiyoti uchun), magistrantlar, bakalavr
+bitiruvchilari va doktorantlar. Ular band, amaliy javob kutadi.
+Har bir foydali post saqlab qo'yishga arziydigan aniq natija bersin: talab, tekshiruv ro'yxati, xato tahlili,
+qism yozish qolipi yoki jarayon bosqichi. Rasmiy talab, qaror raqami, narx va muddat faqat tasdiqlangan
+faktlardan olinsin; noma'lum bo'lsa "tekshiring" deb yozilsin.
+Til: faqat o'zbek tili, lotin yozuvi; o' va g' uchun ‘ belgisi.
 
 BUGUNGI KONTENT TURI: ${pillar.label}
 Maqsad: ${pillar.goal}
@@ -116,10 +115,11 @@ Hech qanday yolg'on natija, kafolat, statistika, narx yoki fakt uydirmang.
 Caption auditoriya tilida (asosan o'zbekcha), tabiiy va jonli bo'lsin, 3-7 ta relevant hashtag bilan tugasin.
 
 Image prompt ingliz tilida yozilsin. Posterda ko'rinadigan matnlarni aynan qo'shtirnoqda bering;
-matnlarning o'zi auditoriya tilida bo'lsin (kerak bo'lsa arabcha so'z ham bo'lishi mumkin).
+matnlarning o'zi o'zbek tilida, lotin yozuvida bo'lsin.
 Ko'pi bilan uchta matn bloki bo'lsin va ular kontent turiga mos kelsin.
-Vizual kattalar uchun professional, zamonaviy editorial/education brand uslubida bo'lsin; bolalarcha clipart,
-multfilm, boshlang'ich darslik estetikasi, tasodifiy arab odam portreti yoki mazmunga aloqasiz masjid rasmi bo'lmasin.
+Vizual "akademik muharrir" uslubida bo'lsin: krem (#F4EFE6), qora (#141414) va bordo (#7A1E24) ranglar,
+sarlavha qalin katta harfli grotesk, urg'u so'z bordo kursiv serif, qog'oz va tahrir belgilari estetikasi.
+Bolalarcha clipart, multfilm, stok-foto portret, diplom-qalpoq klishesi va boshqa ranglar bo'lmasin.
 Faqat JSON: {"topic":"...","hook":"...","script":"...","caption":"...","imagePrompt":"..."}.`,
       },
       {

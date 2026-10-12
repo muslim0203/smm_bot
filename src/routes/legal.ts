@@ -8,7 +8,7 @@ function page(title: string, body: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${title} — Arab Exam SMM</title>
+  <title>${title} — Ilmiy Xizmat SMM</title>
   <style>
     :root{color-scheme:light;font-family:Inter,system-ui,-apple-system,sans-serif;color:#172033;background:#f6f8fc}
     body{margin:0}.wrap{max-width:820px;margin:0 auto;padding:48px 24px 72px}
@@ -17,14 +17,14 @@ function page(title: string, body: string): string {
     p,li{line-height:1.7}a{color:#075db7}.muted{color:#637083}.links{display:flex;gap:16px;flex-wrap:wrap;margin-top:32px}
   </style>
 </head>
-<body><main class="wrap"><article><h1>${title}</h1><p class="muted">Oxirgi yangilanish: 13-avgust, 2026</p>${body}
-<nav class="links"><a href="/privacy">Maxfiylik siyosati</a><a href="/terms">Foydalanish shartlari</a><a href="/data-deletion">Ma'lumotlarni o'chirish</a><a href="https://arabexam.uz">Arab Exam</a></nav>
+<body><main class="wrap"><article><h1>${title}</h1><p class="muted">Oxirgi yangilanish: 12-oktabr, 2026</p>${body}
+<nav class="links"><a href="/privacy">Maxfiylik siyosati</a><a href="/terms">Foydalanish shartlari</a><a href="/data-deletion">Ma'lumotlarni o'chirish</a><a href="https://ilmiyxizmat.uz">Ilmiy Xizmat</a></nav>
 </article></main></body></html>`;
 }
 
 legalRoutes.get("/privacy", (_req, res) => {
   res.type("html").send(page("Maxfiylik siyosati", `
-<p>Ushbu siyosat Arab Exam'ning Instagram yordamchisi va Telegram boshqaruv servisida ma'lumotlar qanday ishlatilishini tushuntiradi.</p>
+<p>Ushbu siyosat Ilmiy Xizmat'ning Instagram yordamchisi va Telegram boshqaruv servisida ma'lumotlar qanday ishlatilishini tushuntiradi.</p>
 <h2>Yig'iladigan ma'lumotlar</h2>
 <ul><li>ulangan Instagram Professional akkaunt IDsi, nomi va OAuth ruxsati;</li><li>botga yuborilgan Direct xabarlar va kommentlar hamda ularga berilgan javoblar;</li><li>xizmat ishlashi va xatolarni aniqlash uchun zarur texnik vaqt va holat ma'lumotlari.</li></ul>
 <h2>Foydalanish maqsadi</h2>
@@ -32,12 +32,12 @@ legalRoutes.get("/privacy", (_req, res) => {
 <h2>Saqlash va himoya</h2>
 <p>OAuth tokenlari shifrlangan holda saqlanadi. Xabar hodisalari odatda 90 kungacha saqlanadi, qonun yoki xavfsizlik talabi bo'lmasa muddat tugagach o'chiriladi. Tashqi xizmatlar sifatida Meta, OpenAI, Railway va ma'lumotlar ombori provayderlari ishlatilishi mumkin.</p>
 <h2>Foydalanuvchi huquqlari</h2>
-<p>Ulanishni Instagram sozlamalaridan bekor qilish yoki <a href="/data-deletion">o'chirish yo'riqnomasi</a> orqali ma'lumotlarni o'chirishni so'rash mumkin. Savollar uchun <a href="https://arabexam.uz">Arab Exam sayti</a> orqali bog'laning.</p>`));
+<p>Ulanishni Instagram sozlamalaridan bekor qilish yoki <a href="/data-deletion">o'chirish yo'riqnomasi</a> orqali ma'lumotlarni o'chirishni so'rash mumkin. Savollar uchun <a href="https://ilmiyxizmat.uz">Ilmiy Xizmat sayti</a> orqali bog'laning.</p>`));
 });
 
 legalRoutes.get("/terms", (_req, res) => {
   res.type("html").send(page("Foydalanish shartlari", `
-<p>Servis Arab Exam Instagram akkauntidagi xabarlar, kommentlar va kontentni boshqarishga yordam beradi.</p>
+<p>Servis Ilmiy Xizmat (@ilmiyxizmat) Instagram akkauntidagi xabarlar, kommentlar va kontentni boshqarishga yordam beradi.</p>
 <h2>Ruxsat etilgan foydalanish</h2>
 <p>Servisdan qonuniy, Meta platforma qoidalariga mos va foydalanuvchilarga zarar yetkazmaydigan maqsadlarda foydalanish kerak. Spam, aldov, maxfiy ma'lumotlarni talab qilish va ruxsatsiz avtomatlashtirish taqiqlanadi.</p>
 <h2>AI javoblari</h2>
@@ -49,6 +49,6 @@ legalRoutes.get("/terms", (_req, res) => {
 legalRoutes.get("/data-deletion", (_req, res) => {
   res.type("html").send(page("Ma'lumotlarni o'chirish", `
 <p>Instagram akkauntingizga tegishli SMM bot ma'lumotlarini o'chirish uchun:</p>
-<ol><li>Instagram sozlamalarida <strong>Apps and Websites</strong> bo'limidan SMM Control Center ulanishini bekor qiling; yoki</li><li><a href="https://arabexam.uz">Arab Exam sayti</a> orqali Instagram username va o'chirish so'rovini yuboring.</li></ol>
+<ol><li>Instagram sozlamalarida <strong>Apps and Websites</strong> bo'limidan SMM Control Center ulanishini bekor qiling; yoki</li><li><a href="https://ilmiyxizmat.uz">Ilmiy Xizmat sayti</a> orqali Instagram username va o'chirish so'rovini yuboring.</li></ol>
 <p>So'rov tekshirilgach, ulangan akkaunt tokeni va unga bog'liq bot ma'lumotlari o'chiriladi. Qonuniy yoki xavfsizlik majburiyati bo'lmasa, jarayon 30 kun ichida yakunlanadi.</p>`));
 });
