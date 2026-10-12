@@ -123,6 +123,33 @@ async function instagramPost(
   }
 }
 
+/**
+ * Xabar yuborish. Tugmalar (quick replies) berilsa, ular bilan urinadi; Instagram bu
+ * xabar turida tugmani qabul qilmasa, oddiy matn bilan qayta yuboradi.
+ */
+async function sendInstagramMessage(
+  credential: InstagramCredential,
+  recipient: { id: string } | { comment_id: string },
+  text: string,
+  quickReplies?: string[],
+): Promise<string | undefined> {
+  const path = `${encodeURIComponent(credential.instagramUserId)}/messages`;
+  if (quickReplies?.length) {
+    try {
+      return await instagramPost(credential, path, {
+        recipient,
+        message: {
+          text,
+          quick_replies: quickReplies.map((title) => ({ content_type: "text", title, payload: title })),
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith("Instagram API 400"))) throw error;
+    }
+  }
+  return instagramPost(credential, path, { recipient, message: { text } });
+}
+
 export async function sendInstagramDm(
   recipientId: string,
   message: string,
@@ -130,11 +157,9 @@ export async function sendInstagramDm(
     instagramUserId: config.instagram.userId,
     accessToken: config.instagram.accessToken,
   },
+  quickReplies?: string[],
 ): Promise<string | undefined> {
-  return instagramPost(credential, `${encodeURIComponent(credential.instagramUserId)}/messages`, {
-    recipient: { id: recipientId },
-    message: { text: message },
-  });
+  return sendInstagramMessage(credential, { id: recipientId }, message, quickReplies);
 }
 
 /**
@@ -145,11 +170,31 @@ export async function sendInstagramPrivateReply(
   commentId: string,
   message: string,
   credential: InstagramCredential,
+  quickReplies?: string[],
 ): Promise<string | undefined> {
-  return instagramPost(credential, `${encodeURIComponent(credential.instagramUserId)}/messages`, {
-    recipient: { comment_id: commentId },
-    message: { text: message },
-  });
+  return sendInstagramMessage(credential, { comment_id: commentId }, message, quickReplies);
+}
+
+/**
+ * Foydalanuvchi biznes akkauntga obuna bo'lganmi. Instagram profilni odatda faqat odam
+ * akkauntga yozganidan keyin beradi; ma'lumot olinmasa undefined qaytadi.
+ */
+export async function isUserFollowingBusiness(
+  userId: string,
+  credential: InstagramCredential,
+): Promise<boolean | undefined> {
+  const { graphBaseUrl, apiVersion } = config.instagram;
+  try {
+    const response = await fetch(
+      `${graphBaseUrl}/${apiVersion}/${encodeURIComponent(userId)}?fields=is_user_follow_business`,
+      { headers: { Authorization: `Bearer ${credential.accessToken}` } },
+    );
+    if (!response.ok) return undefined;
+    const data = await response.json() as { is_user_follow_business?: unknown };
+    return typeof data.is_user_follow_business === "boolean" ? data.is_user_follow_business : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function replyToInstagramComment(

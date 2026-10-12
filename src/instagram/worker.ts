@@ -2,9 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { config } from "../config.js";
 import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
-import { matchKeywordTrigger } from "./keyword.js";
+import { followGateText, matchKeywordTrigger } from "./keyword.js";
 import {
   decideInstagramReply,
+  isUserFollowingBusiness,
   replyToInstagramComment,
   sendInstagramDm,
   sendInstagramPrivateReply,
@@ -110,8 +111,8 @@ async function processEvent(event: ClaimedEvent): Promise<void> {
     ? { instagramUserId: account.instagramUserId, accessToken: decryptSocialToken(account.accessTokenEncrypted) }
     : { instagramUserId: config.instagram.userId, accessToken: config.instagram.accessToken };
 
-  // Kalit so'z triggeri AI komment javobidan mustaqil: comment autojavob o'chiq bo'lsa ham ishlaydi.
-  if (eventType === "COMMENT" && account?.isActive && await handleKeywordTrigger(event, credential)) return;
+  // Kalit so'z triggeri AI autojavobdan mustaqil: DM yoki komment autojavob o'chiq bo'lsa ham ishlaydi.
+  if (account?.isActive && await handleKeywordTrigger(event, credential)) return;
 
   if (
     (account ? !account.isActive : false) ||
@@ -226,40 +227,50 @@ async function handleKeywordTrigger(event: ClaimedEvent, credential: InstagramCr
   const triggers = await prisma.instagramKeywordTrigger.findMany({ where: { projectId, isActive: true } });
   const trigger = matchKeywordTrigger(event.message, triggers);
   if (!trigger) return false;
+  const isComment = event.eventType === "COMMENT";
 
-  const alreadySent = await prisma.instagramInboxEvent.findFirst({
-    where: {
-      id: { not: event.id },
-      accountId: event.accountId,
-      senderId: event.senderId,
-      eventType: "COMMENT",
-      status: "REPLIED",
-      replyText: trigger.dmText,
-    },
-    select: { id: true },
-  });
-  if (alreadySent) {
-    await finalizeEvent(event.id, { status: "IGNORED", lastError: `${trigger.keyword}: matn avval yuborilgan` });
-    return true;
+  // Kommentda bir odamga material bir marta ketadi. DM'da o'zi qayta so'rasa, yana yuboriladi.
+  if (isComment) {
+    const alreadySent = await prisma.instagramInboxEvent.findFirst({
+      where: {
+        id: { not: event.id },
+        accountId: event.accountId,
+        senderId: event.senderId,
+        status: "REPLIED",
+        replyText: trigger.dmText,
+      },
+      select: { id: true },
+    });
+    if (alreadySent) {
+      await finalizeEvent(event.id, { status: "IGNORED", lastError: `${trigger.keyword}: matn avval yuborilgan` });
+      return true;
+    }
   }
 
-  const replyObjectId = await sendInstagramPrivateReply(event.objectId, trigger.dmText, credential);
+  // Material faqat obunachiga. Obuna noma'lum bo'lsa ham (Instagram profilni odam botga
+  // yozmaguncha bermasligi mumkin) obuna so'raladi: odam kalit so'zni DM'da yozgach qayta tekshiriladi.
+  const follows = await isUserFollowingBusiness(event.senderId, credential);
+  const text = follows ? trigger.dmText : followGateText(trigger.keyword, event.account?.username);
+  const quickReplies = follows ? undefined : [trigger.keyword];
+  const replyObjectId = isComment
+    ? await sendInstagramPrivateReply(event.objectId, text, credential, quickReplies)
+    : await sendInstagramDm(event.senderId, text, credential, quickReplies);
   // DM ketdi: bundan keyingi xato qayta yuborishga olib kelmasin.
   await finalizeEvent(event.id, {
     status: "REPLIED",
-    replyText: trigger.dmText,
+    replyText: text,
     replyObjectId: replyObjectId ?? null,
-    lastError: null,
+    lastError: follows ? null : `${trigger.keyword}: obuna ${follows === false ? "yo'q" : "aniqlanmadi"}, obuna so'raldi`,
   });
 
-  if (trigger.commentReply) {
+  if (isComment && trigger.commentReply) {
     try {
       await replyToInstagramComment(event.objectId, trigger.commentReply, credential);
     } catch (error) {
       logger.error("Kalit so'z kommentiga ochiq javob yozilmadi", error, { eventId: event.id });
     }
   }
-  logger.info("Kalit so'z bo'yicha DM yuborildi", { eventId: event.id, keyword: trigger.keyword });
+  logger.info("Kalit so'z bo'yicha DM yuborildi", { eventId: event.id, keyword: trigger.keyword, follows });
   return true;
 }
 

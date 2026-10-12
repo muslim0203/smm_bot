@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchKeywordTrigger, normalizeKeyword } from "../src/instagram/keyword.js";
+import { followGateText, matchKeywordTrigger, normalizeKeyword } from "../src/instagram/keyword.js";
 
 describe("Instagram kalit so'z triggeri", () => {
   const triggers = [{ keyword: "MAQOLA" }, { keyword: "KITOB" }];
@@ -19,5 +19,18 @@ describe("Instagram kalit so'z triggeri", () => {
   it("o' va g' belgilarini olib tashlaydi", () => {
     expect(normalizeKeyword("Qo‘llanma")).toBe("qollanma");
     expect(normalizeKeyword("қўлланма")).toBe("qollanma");
+  });
+});
+
+describe("Obuna so'rovi", () => {
+  it("akkaunt va kalit so'zni aytadi", () => {
+    const text = followGateText("MAQOLA", "ilmiyxizmat");
+    expect(text).toContain("@ilmiyxizmat");
+    expect(text).toContain("MAQOLA deb yozing");
+    expect(followGateText("MAQOLA", null)).toContain("sahifamizga");
+  });
+
+  it("tugma bosilganda keladigan DM matni triggerga mos keladi", () => {
+    expect(matchKeywordTrigger("MAQOLA", [{ keyword: "MAQOLA" }])?.keyword).toBe("MAQOLA");
   });
 });

@@ -35,3 +35,12 @@ export function matchKeywordTrigger<T extends { keyword: string }>(message: stri
   const tokens = new Set(normalizedTokens(message));
   return triggers.find((trigger) => tokens.has(normalizeKeyword(trigger.keyword)));
 }
+
+/** Obuna bo'lmagan (yoki obunasi aniqlanmagan) odamga material o'rniga yuboriladigan xabar. */
+export function followGateText(keyword: string, username?: string | null): string {
+  const page = username ? `@${username} sahifasiga` : "sahifamizga";
+  return [
+    `Ro‘yxatni olish uchun avval ${page} obuna bo‘ling 🙌`,
+    `Obuna bo‘lgach, pastdagi «${keyword}» tugmasini bosing yoki shu yerga ${keyword} deb yozing — ro‘yxat darhol keladi.`,
+  ].join("\n\n");
+}
